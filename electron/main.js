@@ -11,6 +11,7 @@ process.env.APIDOCK_ROOT = process.env.APIDOCK_ROOT || os.homedir();
 fs.mkdirSync(process.env.APIDOCK_DATA, { recursive: true });
 
 const server = require('../server');
+const updater = require('./updater');
 
 let win = null;
 let port = null;
@@ -54,11 +55,13 @@ function createWindow() {
       nodeIntegration: false,
       sandbox: true,
       spellcheck: false,
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
   const home = `http://127.0.0.1:${port}/`;
   win.loadURL(home);
   win.once('ready-to-show', () => win.show());
+  updater.init(win);
 
   // Links that leave ApiDock open in the normal browser.
   win.webContents.setWindowOpenHandler(({ url }) => {

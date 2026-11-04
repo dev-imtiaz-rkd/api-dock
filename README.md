@@ -99,6 +99,48 @@ ApiDock is organised by collection:
   `php artisan serve` on a free port (8101 and up) and shows its output.
   **Create from routes** turns `php artisan route:list` into a collection.
 
+## Teams
+
+The **Team** button at the bottom of the dock signs you in with Google. From
+there you can:
+
+- create teams and invite people by their Google email; they accept the
+  invite in their own ApiDock;
+- share a collection with **⋯ → Share with team**, giving each member
+  **Viewer** (can send requests) or **Editor** (can change requests and
+  variables) access.
+
+Shared collections live on the team server and stay in sync for everyone. If
+two people edit at once, ApiDock warns instead of overwriting. Your choice of
+active variable set stays personal. The session token is kept locally in
+`data/cloud.json`, and the UI reaches the team server only through the local
+app.
+
+### Team server (`cloud/server.js`)
+
+The team server has no dependencies. It needs Node 22.13 or newer, because it
+uses the built-in SQLite. Configure it with a `.env` file next to the script:
+
+```
+PUBLIC_URL=https://apidock.ebareidechutionek.cfd
+PORT=4010
+DB_PATH=/var/www/nginx/apidock/data/apidock-cloud.db
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+```
+
+The live deployment on the Dhaka server is set up as follows:
+
+| Part | Where |
+| --- | --- |
+| Code | `/var/www/nginx/apidock/` |
+| Process | pm2 process `apidock-team` |
+| Web server | nginx site `apidock.ebareidechutionek.cfd` |
+| HTTPS | Let's Encrypt certificate, renewed by certbot |
+
+The Google OAuth client is a *Web application* with redirect URI
+`https://apidock.ebareidechutionek.cfd/auth/google/callback`.
+
 ## Where data lives
 
 All data is kept in `data/` as plain JSON:

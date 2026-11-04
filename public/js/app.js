@@ -1,11 +1,13 @@
 // ApiDock shell. Every collection is its own workspace: picking it in the
 // dock shows that collection's tree and only that collection's tabs.
 import { h, icon, api, toast, modal, showMenu, confirmModal, selectEl, debounce } from './util.js';
-import { S, uid, newRequest, normalizeRequest, clone, getCollection, findItem, findAnywhere, saveCollection, activeEnv, findEnv, stripTransient, flattenRequests, buildOutgoing, parseVarText, looksLikeVarText } from './model.js';
+import { S, uid, newRequest, normalizeRequest, clone, getCollection, findItem, findAnywhere, saveCollection, activeEnv, findEnv, rememberCloudActive, stripTransient, flattenRequests, buildOutgoing, parseVarText, looksLikeVarText } from './model.js';
 import { renderDock, renderPane, SYSTEM, hueOf, monogram, importVarSet } from './sidebar.js';
 import { renderRequestTab, renderResponse, importCurl } from './editor.js';
 import { renderCollectionTab, renderEnvironmentTab, renderRunnerTab, renderServiceTab } from './pages.js';
+import { renderTeamTab, loadCloudStatus, loadMe, syncCloudCollections, startPolling, signIn, signOut, shareCollection, copyToLocal, deleteShared, createTeam, answerInvite, loginView, redeemCode } from './team.js';
 import { app } from './bus.js';
+import { initUpdates, updatesSupported, checkForUpdates, versionInfo, updateAvailable, showUpdateCard } from './updates.js';
 
 const $ = (sel) => document.querySelector(sel);
 const LS = {
@@ -133,6 +135,7 @@ function switchWs(ws) {
 
 function wsForTab(tab) {
   if (tab.kind === 'service') return 'services';
+  if (tab.kind === 'team') return 'team';
   return tab.collectionId && getCollection(tab.collectionId) ? tab.collectionId : 'drafts';
 }
 
@@ -154,6 +157,7 @@ function tabTitle(t) {
   if (t.kind === 'environment') return findEnv(t.collectionId, t.refId)?.name || 'Environment';
   if (t.kind === 'runner') return t.refId ? `Run · ${findItem(getCollection(t.collectionId) || { items: [] }, t.refId)?.item.name || ''}` : 'Runner';
   if (t.kind === 'service') return S.discover?.services.find((s) => s.id === t.refId)?.name.split('/').pop() || 'Service';
+  if (t.kind === 'team') return (S.me?.teams || []).find((x) => x.id === t.refId)?.name || 'Team';
   return 'Tab';
 }
 
@@ -177,7 +181,7 @@ function renderActive() {
   const t = S.tabs.find((x) => x.id === S.activeTabId && x.ws === S.ws);
   const root = $('#view');
   if (!t) return root.replaceChildren(emptyStage());
-  ({ request: renderRequestTab, collection: renderCollectionTab, folder: renderCollectionTab, environment: renderEnvironmentTab, runner: renderRunnerTab, service: renderServiceTab })[t.kind](t, root);
+  ({ request: renderRequestTab, collection: renderCollectionTab, folder: renderCollectionTab, environment: renderEnvironmentTab, runner: renderRunnerTab, service: renderServiceTab, team: renderTeamTab })[t.kind](t, root);
 }
 
 // What the stage shows when a workspace has no open tab.
@@ -218,6 +222,10 @@ function emptyStage() {
           )
         : h('p', { class: 'es-hint' }, 'Pick a request on the left, or press ', h('kbd', {}, 'Ctrl'), ' ', h('kbd', {}, 'T'), ' for a new one.'),
     );
+  }
+  if (S.ws === 'team') {
+    if (!S.cloud?.signedIn) return loginView();
+    return h('div', { class: 'empty-stage' }, h('h1', {}, 'Teams'), h('p', { class: 'es-desc' }, 'Pick a team on the left to manage members, invites and who can use each shared collection — or create a new one.'), h('div', { class: 'es-actions' }, h('button', { class: 'pill-btn accent', onClick: createTeam }, 'New team')));
   }
   if (S.ws === 'services') return h('div', { class: 'empty-stage' }, h('h1', {}, 'Services'), h('p', { class: 'es-desc' }, 'Laravel apps found in your projects. Start one, then turn its routes into a collection.'));
   return h(
@@ -697,7 +705,8 @@ async function setActiveEnv(collectionId, envId) {
   const coll = getCollection(collectionId);
   if (!coll) return;
   coll.activeEnvironmentId = envId || null;
-  await saveCollection(coll);
+  if (coll.cloud) rememberCloudActive(coll);
+  else await saveCollection(coll);
   renderPaneNow();
   const t = S.tabs.find((x) => x.id === S.activeTabId);
   if (!t || t.kind === 'request' || t.kind === 'environment') renderActive();
@@ -822,10 +831,24 @@ function showShortcuts() {
     ['Ctrl K', 'Filter requests'],
     ['Ctrl O', 'Import'],
   ];
+  const v = versionInfo();
   modal({
-    title: 'Keyboard shortcuts',
-    width: 420,
-    body: h('div', { class: 'shortcuts' }, rows.map(([k, d]) => h('div', { class: 'sc-row' }, h('span', {}, d), h('span', {}, k.split(' ').map((x) => h('kbd', {}, x)))))),
+    title: 'ApiDock',
+    width: 440,
+    body: h(
+      'div',
+      {},
+      updatesSupported
+        ? h(
+            'div',
+            { class: 'about-row' },
+            h('div', {}, h('b', {}, `Version ${v?.version || ''}`), h('div', { class: 'muted small' }, v?.supported ? 'Checks for updates automatically.' : v?.reason || '')),
+            v?.supported ? h('button', { class: 'btn sm', onClick: checkForUpdates }, icon('refresh', 14), 'Check for updates') : null,
+          )
+        : null,
+      h('div', { class: 'section-title' }, 'Keyboard shortcuts'),
+      h('div', { class: 'shortcuts' }, rows.map(([k, d]) => h('div', { class: 'sc-row' }, h('span', {}, d), h('span', {}, k.split(' ').map((x) => h('kbd', {}, x)))))),
+    ),
   });
 }
 
@@ -874,6 +897,13 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+window.addEventListener('unhandledrejection', (e) => {
+  const err = e.reason;
+  if (!err || !err.message) return;
+  toast(err.message, 'error');
+  if (err.conflict) renderAll();
+});
+
 window.addEventListener('beforeunload', () => {
   for (const t of S.tabs) rememberCall(t);
   persistTabs();
@@ -883,6 +913,16 @@ window.addEventListener('beforeunload', () => {
 // ---------- wire up & boot ----------
 Object.assign(app, {
   renderAll,
+  renderDock: () => renderDock($('#dock')),
+  openTeam: (id) => openSingleton('team', id),
+  signIn,
+  signOut,
+  shareCollection,
+  copyToLocal,
+  deleteShared,
+  createTeam,
+  answerInvite,
+  redeemCode,
   tabTitle,
   tabLead,
   activate,
@@ -925,6 +965,8 @@ Object.assign(app, {
   themeName,
   cycleTheme,
   showShortcuts,
+  updateAvailable,
+  showUpdateCard,
   layoutMode: () => LS.get('apidock.layout', 'side'),
   setLayoutMode: (m) => LS.set('apidock.layout', m),
   splitRatio: () => Number(LS.get('apidock.split2', 0.5)) || 0.5,
@@ -941,6 +983,8 @@ async function boot() {
     const data = await api('GET', '/api/bootstrap');
     S.collections = data.collections;
     S.settings = data.settings;
+    await loadCloudStatus();
+    if (S.cloud.signedIn) await Promise.race([Promise.all([loadMe(), syncCloudCollections()]), new Promise((r) => setTimeout(r, 6000))]);
   } catch (err) {
     document.body.replaceChildren(h('div', { class: 'empty-stage' }, h('h1', {}, 'ApiDock server is not reachable'), h('p', {}, err.message)));
     return;
@@ -955,6 +999,8 @@ async function boot() {
   renderAll();
   loadHistory().then(() => !S.activeTabId && renderActive());
   refreshDiscover();
+  if (S.cloud?.signedIn) startPolling();
+  initUpdates();
 }
 
 boot();

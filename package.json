@@ -1,7 +1,7 @@
 {
   "name": "apidock",
   "productName": "ApiDock",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A local API client: collections, variable sets, request builder and response viewer.",
   "main": "electron/main.js",
   "private": true,
@@ -10,7 +10,8 @@
     "start": "node server.js",
     "app": "electron .",
     "build": "electron-builder --win nsis portable",
-    "build:dir": "electron-builder --win dir"
+    "build:dir": "electron-builder --win dir",
+    "release": "electron-builder --win nsis --publish always"
   },
   "engines": {
     "node": ">=20"
@@ -38,7 +39,10 @@
     "asar": true,
     "win": {
       "icon": "build/icon.png",
-      "target": ["nsis", "portable"],
+      "target": [
+        "nsis",
+        "portable"
+      ],
       "artifactName": "${productName}-${version}-${arch}-${target}.${ext}"
     },
     "nsis": {
@@ -52,6 +56,17 @@
     },
     "portable": {
       "artifactName": "${productName}-${version}-portable.${ext}"
-    }
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "kiurd-gentleman",
+        "repo": "api-dock",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
   }
 }

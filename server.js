@@ -6,6 +6,7 @@ const store = require('./lib/store');
 const postman = require('./lib/postman');
 const services = require('./lib/services');
 const { send } = require('./lib/runner');
+const cloud = require('./lib/cloud');
 
 const PORT = Number(process.env.APIDOCK_PORT) || 4000;
 let port = PORT; // the port actually bound (the desktop app asks for a free one)
@@ -171,6 +172,46 @@ route('POST', '/api/services/:id/stop', async ({ id }) => (await services.stop(i
 route('GET', '/api/services/:id/logs', ({ id }) => services.logs(id));
 route('POST', '/api/services/:id/collection', ({ id }) => services.toCollection(id));
 
+// ---- team server (sign-in + proxy; the session token stays on this machine) ----
+route('GET', '/api/cloud/status', () => cloud.status());
+route('POST', '/api/cloud/login', () => ({ url: cloud.loginUrl(port) }));
+route('GET', '/api/cloud/config', () => cloud.authConfig());
+route('POST', '/api/cloud/auth', (_, body) => cloud.passwordAuth(body.mode, body));
+route('POST', '/api/cloud/logout', async () => (await cloud.logout(), cloud.status()));
+route('PUT', '/api/cloud/server', (_, body) => cloud.setServer(body.server));
+route('GET', '/api/cloud/callback', async (params, body, res, query) => {
+  let title = 'Signed in';
+  let msg = '';
+  try {
+    const user = await cloud.finishLogin(query.get('token') || '', query.get('state') || '');
+    msg = `Signed in as <b>${String(user.email).replace(/[<>&"]/g, '')}</b>. You can close this tab and go back to ApiDock.`;
+  } catch (err) {
+    title = 'Sign-in failed';
+    msg = String(err.message).replace(/[<>&"]/g, '');
+  }
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(`<!doctype html><meta charset="utf-8"><title>ApiDock — ${title}</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;font:15px/1.5 system-ui,'Segoe UI',sans-serif;background:#121211;color:#ecebe5}
+.c{max-width:420px;padding:32px;border:1px solid #2a2926;border-radius:16px;background:#1c1c1a}h1{font-size:20px;margin:0 0 8px}p{color:#bdb9af;margin:0}</style>
+<div class="c"><h1>${title}</h1><p>${msg}</p></div><script>setTimeout(()=>window.close(),2500)</script>`);
+});
+// Everything else under /api/cloud/x/... is forwarded to the team server's /api/...
+for (const method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']) {
+  routes.push({
+    method,
+    re: /^\/api\/cloud\/x(\/.*)$/,
+    keys: ['path'],
+    handler: async ({ path: p }, body, res) => {
+      try {
+        return await cloud.call(method, p, ['POST', 'PUT', 'PATCH'].includes(method) ? body : undefined);
+      } catch (err) {
+        res.writeHead(err.status || 502, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ error: err.message, ...(err.data || {}) }));
+      }
+    },
+  });
+}
+
 const server = http.createServer(async (req, res) => {
   const { pathname } = new URL(req.url, 'http://x');
   if (!pathname.startsWith('/api/')) return serveStatic(req, res);
@@ -187,8 +228,8 @@ const server = http.createServer(async (req, res) => {
     if (!m) continue;
     const params = Object.fromEntries(r.keys.map((k, i) => [k, decodeURIComponent(m[i + 1])]));
     try {
-      const body = ['POST', 'PUT'].includes(req.method) ? await readBody(req) : {};
-      const out = await r.handler(params, body, res);
+      const body = ['POST', 'PUT', 'PATCH'].includes(req.method) ? await readBody(req) : {};
+      const out = await r.handler(params, body, res, new URL(req.url, 'http://x').searchParams);
       if (!res.headersSent) json(res, 200, out ?? { ok: true });
     } catch (err) {
       if (!res.headersSent) json(res, 400, { error: err.message });

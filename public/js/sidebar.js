@@ -7,6 +7,7 @@ import { app } from './bus.js';
 export const SYSTEM = {
   drafts: { label: 'Drafts & History', icon: 'history' },
   services: { label: 'Services', icon: 'server' },
+  team: { label: 'Team', icon: 'users' },
 };
 
 // ---------- identity of a collection ----------
@@ -55,7 +56,7 @@ export function renderDock(root) {
     h(
       'div',
       { class: 'dock-list' },
-      S.collections.map((c) => tile(c.id, c.name, h('span', { class: 'mono-gram' }, monogram(c.name)), hueOf(c.id), 'coll')),
+      S.collections.map((c) => tile(c.id, c.cloud ? `${c.name} — shared in ${c.cloud.teamName}` : c.name, h('span', { class: 'mono-gram' }, monogram(c.name)), hueOf(c.id), 'coll' + (c.cloud ? ' shared' : ''))),
       h(
         'button',
         {
@@ -73,10 +74,18 @@ export function renderDock(root) {
     h(
       'div',
       { class: 'dock-sys' },
-      Object.entries(SYSTEM).map(([ws, d]) => tile(ws, d.label, icon(d.icon, 18), null, 'sys')),
+      Object.entries(SYSTEM).map(([ws, d]) => {
+        if (ws !== 'team') return tile(ws, d.label, icon(d.icon, 18), null, 'sys');
+        const u = S.cloud?.signedIn && S.cloud.user;
+        const pending = (S.me?.invites || []).length;
+        const t = tile(ws, u ? `Team — signed in as ${u.email}` : 'Team — sign in to share collections', u && u.picture ? h('img', { class: 'dock-avatar', src: u.picture, alt: '', referrerpolicy: 'no-referrer' }) : icon(d.icon, 18), null, 'sys team-tile');
+        if (pending) t.append(h('span', { class: 'dock-badge', title: `${pending} invite${pending === 1 ? '' : 's'}` }, pending));
+        return t;
+      }),
       h('div', { class: 'dock-sep' }),
       h('button', { class: 'dock-tile sys', title: `Theme: ${app.themeName()}`, onClick: app.cycleTheme }, icon(app.themeName() === 'dark' ? 'moon' : 'sun', 17)),
-      h('button', { class: 'dock-tile sys', title: 'Keyboard shortcuts', onClick: app.showShortcuts }, h('span', { class: 'q' }, '?')),
+      app.updateAvailable && app.updateAvailable() ? h('button', { class: 'dock-tile sys update-tile', title: `Update available — ApiDock ${app.updateAvailable().version || ''}`, onClick: app.showUpdateCard }, icon('download', 17), h('span', { class: 'dock-badge' }, '1')) : null,
+      h('button', { class: 'dock-tile sys', title: 'About & keyboard shortcuts', onClick: app.showShortcuts }, h('span', { class: 'q' }, '?')),
     ),
   );
 }
@@ -93,6 +102,7 @@ export function renderPane(root) {
   let body;
   if (c) body = collectionPane(c);
   else if (S.ws === 'services') body = servicesPane();
+  else if (S.ws === 'team') body = teamPane();
   else body = draftsPane();
   root.replaceChildren(...[body, c ? envFooter(c) : null].filter(Boolean));
   root.dataset.ws = S.ws;
@@ -409,7 +419,7 @@ function collectionPane(c) {
     'div',
     { class: 'pane-body' },
     paneHead({
-      kicker: 'Collection',
+      kicker: c.cloud ? h('span', { class: 'kicker-shared' }, icon('users', 12), `${c.cloud.teamName} · ${c.cloud.role === 'viewer' ? 'view only' : c.cloud.role}`) : 'Collection',
       title: c.name,
       onTitle: () => app.openCollection(c.id),
       meta: h(
@@ -582,6 +592,7 @@ export function collectionMenu(c) {
       onClick: async () => {
         const copy = clone(c);
         delete copy.source;
+        delete copy.cloud;
         copy.name = `${c.name} copy`;
         (copy.items || []).forEach(reassignIds);
         const saved = await api('POST', '/api/collections', copy);
@@ -589,9 +600,21 @@ export function collectionMenu(c) {
         app.renderAll();
       },
     },
-    { label: 'Export as Postman v2.1', icon: 'download', onClick: () => (location.href = `/api/collections/${c.id}/export`) },
+    ...(c.cloud
+      ? [
+          { label: 'Manage access…', icon: 'users', onClick: () => app.openTeam(c.cloud.teamId) },
+          { label: 'Copy to my collections', icon: 'copy', onClick: () => app.copyToLocal(c) },
+        ]
+      : [
+          { label: 'Share with team…', icon: 'users', onClick: () => app.shareCollection(c) },
+          { label: 'Export as Postman v2.1', icon: 'download', onClick: () => (location.href = `/api/collections/${c.id}/export`) },
+        ]),
     '-',
-    {
+    c.cloud
+      ? c.cloud.role === 'owner'
+        ? { label: 'Delete for everyone', icon: 'trash', danger: true, onClick: () => app.deleteShared(c) }
+        : null
+      : {
       label: 'Delete collection',
       icon: 'trash',
       danger: true,
@@ -688,6 +711,82 @@ function draftsPane() {
     }),
     openList(),
     S.history.length ? searchBox('Filter history') : null,
+    list,
+  );
+}
+
+// ---------- team ----------
+function teamPane() {
+  const signedIn = S.cloud?.signedIn;
+  const u = S.cloud?.user;
+  const list = h('div', { class: 'tree' });
+  if (!signedIn) {
+    list.append(
+      h(
+        'div',
+        { class: 'pane-empty' },
+        h('p', {}, 'Sign in or create an account on the right to create teams, invite people and share collections.'),
+      ),
+    );
+    return h('div', { class: 'pane-body' }, paneHead({ kicker: 'Workspace', title: 'Team' }), list);
+  }
+  const me = S.me || { teams: [], invites: [] };
+  if (me.invites.length) {
+    list.append(h('div', { class: 'group-label' }, `Invites · ${me.invites.length}`));
+    for (const inv of me.invites) {
+      list.append(
+        h(
+          'div',
+          { class: 'invite-card' },
+          h('div', {}, h('b', {}, inv.teamName), h('div', { class: 'muted small' }, `from ${inv.invitedBy}${inv.collections ? ` · ${inv.collections} collection${inv.collections === 1 ? '' : 's'}` : ''}`)),
+          h('div', { class: 'invite-actions' }, h('button', { class: 'tbtn accent', onClick: () => app.answerInvite(inv, true) }, 'Join'), h('button', { class: 'tbtn', onClick: () => app.answerInvite(inv, false) }, 'Decline')),
+        ),
+      );
+    }
+  }
+  const codeIn = h('input', { class: 'input code-input', placeholder: 'XXXXX-XXXXX', maxlength: 14, spellcheck: false, onKeydown: (e) => e.key === 'Enter' && join() });
+  const join = async () => codeIn.value.trim() && (await app.redeemCode(codeIn.value.trim())) && (codeIn.value = '');
+  list.append(h('div', { class: 'group-label' }, 'Join with invite code'), h('div', { class: 'code-row' }, codeIn, h('button', { class: 'btn sm', onClick: join }, 'Join')));
+  list.append(h('div', { class: 'group-label' }, `Your teams · ${me.teams.length}`));
+  for (const t of me.teams) {
+    const tab = S.tabs.find((x) => x.kind === 'team' && x.refId === t.id);
+    list.append(
+      h(
+        'div',
+        { class: 'trow team-row' + (tab && tab.id === S.activeTabId ? ' active' : ''), onClick: () => app.openTeam(t.id) },
+        icon('users', 14, 'ficon'),
+        h('span', { class: 'tlabel' }, t.name),
+        h('span', { class: 'tcount' }, `${t.members} · ${t.role}`),
+      ),
+    );
+  }
+  if (!me.teams.length) list.append(h('div', { class: 'pane-empty' }, h('p', {}, 'No teams yet.'), h('button', { class: 'tbtn accent', onClick: app.createTeam }, '+ Create a team')));
+  const shared = S.collections.filter((c) => c.cloud);
+  if (shared.length) {
+    list.append(h('div', { class: 'group-label' }, `Shared with you · ${shared.length}`));
+    for (const c of shared) {
+      list.append(
+        h(
+          'div',
+          { class: 'trow', onClick: () => app.switchWs(c.id) },
+          h('span', { class: 'ws-gram sm', style: { '--hue': hueOf(c.id), background: `oklch(0.62 0.13 ${hueOf(c.id)})` } }, monogram(c.name)),
+          h('span', { class: 'tlabel' }, c.name),
+          h('span', { class: 'tcount' }, c.cloud.role),
+        ),
+      );
+    }
+  }
+  return h(
+    'div',
+    { class: 'pane-body' },
+    h(
+      'div',
+      { class: 'account' },
+      u?.picture ? h('img', { class: 'avatar lg', src: u.picture, alt: '', referrerpolicy: 'no-referrer' }) : h('span', { class: 'avatar lg' }, (u?.name || u?.email || '?')[0].toUpperCase()),
+      h('div', { class: 'account-main' }, h('b', {}, u?.name || ''), h('span', {}, u?.email || '')),
+      h('button', { class: 'icon-btn', title: 'Sign out', onClick: app.signOut }, icon('logout', 15)),
+    ),
+    paneHead({ kicker: 'Workspace', title: 'Team', actions: [h('button', { class: 'icon-btn', title: 'New team', onClick: app.createTeam }, icon('plus', 16))] }),
     list,
   );
 }

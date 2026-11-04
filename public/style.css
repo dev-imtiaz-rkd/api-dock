@@ -732,3 +732,89 @@ button.pane-title:hover { color: var(--accent-ink); }
 .tree .trow .row-act { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); background: var(--surface); }
 .tree .trow:hover .tcount { visibility: hidden; }
 .tree .trow.active .row-act { background: var(--accent-soft); }
+
+/* ---------- team ---------- */
+.dock-tile.coll.shared::after { content: ''; position: absolute; right: -3px; bottom: -3px; width: 12px; height: 12px; border-radius: 50%; background: oklch(0.72 0.14 var(--hue)); border: 2.5px solid var(--dock); }
+.dock-avatar { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; }
+.kicker-shared { display: inline-flex; align-items: center; gap: 5px; text-transform: none; letter-spacing: 0.01em; font-size: 11.5px; }
+.avatar { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-ink); font: 600 11px var(--sans); flex: none; object-fit: cover; }
+.avatar.lg { width: 34px; height: 34px; font-size: 13px; }
+.account { display: flex; align-items: center; gap: 10px; padding: 14px 12px 6px 16px; }
+.account-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.account-main b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account-main span { font-size: 11.5px; color: var(--mute); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.google-btn { display: inline-flex; align-items: center; gap: 10px; height: 38px; padding: 0 16px 0 6px; border-radius: 99px; border: 1px solid var(--line-2); background: var(--raise); font-weight: 600; color: var(--ink); }
+.google-btn:hover { border-color: var(--ink-2); }
+.google-btn .g { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: #fff; color: #4285f4; font: 700 15px var(--sans); box-shadow: 0 0 0 1px #dadce0; }
+.invite-card { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 2px 4px 8px; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); font-size: 12.5px; }
+.invite-actions { display: flex; gap: 2px; flex: none; }
+.ws-gram.sm { width: 18px; height: 18px; font-size: 8.5px; border-radius: 5px; color: #111; }
+.team-page { max-width: 860px; }
+.member-list { display: flex; flex-direction: column; }
+.member-row { display: flex; align-items: center; gap: 12px; padding: 8px 4px; border-bottom: 1px solid var(--line); }
+.member-row.pending { opacity: 0.85; }
+.member-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.member-main b { font-weight: 500; }
+.member-main span { font-size: 12px; color: var(--mute); }
+.member-row .select.sm { width: auto; }
+.you { color: var(--mute); font-weight: 400; }
+.role-tag { font-size: 12px; color: var(--mute); padding: 0 8px; }
+.icon-spacer { width: 28px; flex: none; }
+.invite-box { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; }
+.invite-line { display: flex; gap: 8px; }
+.invite-line .input { flex: 1; }
+.invite-line .select { width: 120px; }
+.grant-list { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.grant { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; }
+.shared-coll { padding: 12px 0 14px; border-bottom: 1px solid var(--line); }
+.shared-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.access-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px 18px; }
+.access-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; }
+.access-row .select.sm { width: auto; }
+.share-members .member-row { padding: 6px 0; }
+
+/* ---------- login ---------- */
+.auth-screen { flex: 1; overflow: auto; display: grid; place-items: center; padding: 40px 20px; background:
+  radial-gradient(1200px 500px at 50% -10%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 70%), var(--raise); }
+.auth-card { width: min(420px, 100%); padding: 34px 32px 26px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow-lg); }
+.auth-logo { width: 44px; height: 44px; border-radius: 13px; background: var(--ink); color: var(--paper); display: grid; place-items: center; font: 700 18px var(--mono); position: relative; margin-bottom: 18px; }
+.auth-logo i { position: absolute; right: -3px; bottom: -3px; width: 12px; height: 12px; border-radius: 50%; background: #e8823c; border: 3px solid var(--surface); }
+.auth-card h1 { font-size: 21px; letter-spacing: -0.015em; line-height: 1.25; }
+.auth-sub { color: var(--mute); font-size: 13.5px; margin: 6px 0 20px; }
+.auth-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 3px; border-radius: 10px; background: var(--hover); margin-bottom: 20px; }
+.auth-tab { border: 0; background: none; height: 32px; border-radius: 8px; font-weight: 500; color: var(--mute); }
+.auth-tab.active { background: var(--raise); color: var(--ink); box-shadow: var(--shadow); }
+.auth-form .field { position: relative; }
+.auth-input { height: 40px; font-size: 14px; }
+.auth-reveal { position: absolute; right: 6px; bottom: 6px; }
+.auth-error { color: var(--err); font-size: 12.5px; min-height: 18px; margin: -4px 0 8px; }
+.auth-error:empty { min-height: 0; margin: 0; }
+.auth-submit { width: 100%; height: 42px; justify-content: center; font-size: 14px; border-radius: 10px; }
+.auth-or { display: flex; align-items: center; gap: 12px; color: var(--faint); font-size: 12px; margin: 18px 0; }
+.auth-or::before, .auth-or::after { content: ''; flex: 1; height: 1px; background: var(--line); }
+.google-btn.wide { width: 100%; justify-content: center; height: 42px; border-radius: 10px; }
+.auth-warn { color: var(--warn); font-size: 12.5px; margin-top: 14px; }
+.auth-foot { color: var(--faint); font-size: 11.5px; margin-top: 20px; line-height: 1.5; }
+.code-row { display: flex; gap: 6px; padding: 0 6px 6px; }
+.code-input { height: 30px; font: 13px var(--mono); letter-spacing: 0.06em; text-transform: uppercase; }
+.invite-code { display: inline-flex; align-items: center; gap: 6px; font: 600 12px var(--mono); letter-spacing: 0.06em; padding: 3px 8px; border-radius: 6px; background: var(--accent-soft); color: var(--accent-ink); cursor: pointer; }
+.invite-code.big { font-size: 20px; padding: 10px 14px; justify-content: space-between; cursor: default; }
+
+/* ---------- app updates ---------- */
+.update-card { position: fixed; right: 20px; bottom: 20px; z-index: 65; width: min(380px, calc(100vw - 40px)); display: flex; gap: 12px; padding: 16px 16px 14px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-lg); animation: rise 0.2s ease-out; }
+.update-card[hidden] { display: none; }
+.uc-icon { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; flex: none; background: var(--accent-soft); color: var(--accent-ink); }
+.uc-icon.ok { background: var(--ok-soft); color: var(--ok); }
+.uc-icon.err { background: var(--err-soft); color: var(--err); }
+.spin-slow svg { animation: spin 1.4s linear infinite; }
+.uc-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.uc-main b { font-size: 13.5px; }
+.uc-main > span { font-size: 12.5px; color: var(--mute); }
+.uc-actions { display: flex; gap: 6px; margin-top: 8px; }
+.uc-bar { height: 6px; border-radius: 6px; background: var(--hover); overflow: hidden; margin: 6px 0 2px; }
+.uc-bar i { display: block; height: 100%; background: var(--accent); border-radius: 6px; transition: width 0.3s; }
+.uc-notes { font-size: 12.5px; color: var(--ink-2); }
+.uc-notes summary { cursor: pointer; color: var(--accent-ink); }
+.uc-notes p { white-space: pre-wrap; margin-top: 4px; max-height: 140px; overflow: auto; }
+.update-tile { color: var(--accent) !important; }
+.about-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0 14px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }

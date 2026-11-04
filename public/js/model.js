@@ -96,7 +96,74 @@ export function reassignIds(item) {
   return item;
 }
 
+// ---------- team (shared) collections ----------
+// Shared collections live on the team server, reached through the local proxy.
+export const cloudApi = (method, p, body) => api(method, `/api/cloud/x${p}`, body);
+
+// Which variable set is in use is personal, so it stays on this machine.
+const ACTIVE_KEY = 'apidock.cloudActive';
+function cloudActiveMap() {
+  try {
+    return JSON.parse(localStorage.getItem(ACTIVE_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+export function rememberCloudActive(coll) {
+  const m = cloudActiveMap();
+  m[coll.id] = coll.activeEnvironmentId || null;
+  try {
+    localStorage.setItem(ACTIVE_KEY, JSON.stringify(m));
+  } catch {}
+}
+
+// Server record -> collection object used by the UI.
+export function fromCloud(full) {
+  const data = { ...full.data, id: full.id };
+  data.cloud = { teamId: full.teamId, teamName: full.teamName, role: full.role, version: full.version, updatedAt: full.updatedAt, updatedBy: full.updatedBy };
+  const act = cloudActiveMap()[full.id];
+  data.activeEnvironmentId = act && (data.environments || []).some((e) => e.id === act) ? act : null;
+  return data;
+}
+
+// Collection object -> what is stored on the server (no personal/local fields).
+export function toCloudData(coll) {
+  const d = stripTransient(coll);
+  delete d.cloud;
+  delete d.activeEnvironmentId;
+  delete d.source;
+  return d;
+}
+
+export const isViewOnly = (coll) => !!(coll && coll.cloud && coll.cloud.role === 'viewer');
+
+async function saveCloudCollection(coll) {
+  rememberCloudActive(coll);
+  if (isViewOnly(coll)) {
+    const e = new Error('View only — ask the owner for Editor access to change this collection');
+    e.quiet = false;
+    throw e;
+  }
+  try {
+    const meta = await cloudApi('PUT', `/collections/${coll.id}`, { data: toCloudData(coll), baseVersion: coll.cloud.version });
+    coll.cloud = { ...coll.cloud, version: meta.version, updatedAt: meta.updatedAt, updatedBy: meta.updatedBy };
+    return coll;
+  } catch (err) {
+    if (err.status === 409 && err.data && err.data.current) {
+      // Someone else saved first: take their version so nothing of theirs is lost.
+      const fresh = fromCloud(err.data.current);
+      const i = S.collections.findIndex((c) => c.id === coll.id);
+      if (i >= 0) S.collections[i] = fresh;
+      const e = new Error(`${err.message}. Their version is loaded — save again to apply your change on top.`);
+      e.conflict = true;
+      throw e;
+    }
+    throw err;
+  }
+}
+
 export async function saveCollection(coll) {
+  if (coll.cloud) return saveCloudCollection(coll);
   const saved = await api('PUT', `/api/collections/${coll.id}`, stripTransient(coll));
   const i = S.collections.findIndex((c) => c.id === coll.id);
   if (i >= 0) S.collections[i] = { ...coll, updatedAt: saved.updatedAt };
