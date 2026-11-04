@@ -1,0 +1,57 @@
+{
+  "name": "apidock",
+  "productName": "ApiDock",
+  "version": "1.0.0",
+  "description": "A local API client: collections, variable sets, request builder and response viewer.",
+  "main": "electron/main.js",
+  "private": true,
+  "author": "Imtiaz",
+  "scripts": {
+    "start": "node server.js",
+    "app": "electron .",
+    "build": "electron-builder --win nsis portable",
+    "build:dir": "electron-builder --win dir"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "electron": "^45.2.1",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "com.kolpolok.apidock",
+    "productName": "ApiDock",
+    "copyright": "ApiDock",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "server.js",
+      "lib/**/*",
+      "public/**/*",
+      "electron/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "icon": "build/icon.png",
+      "target": ["nsis", "portable"],
+      "artifactName": "${productName}-${version}-${arch}-${target}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ApiDock",
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    }
+  }
+}

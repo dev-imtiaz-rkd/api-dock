@@ -1,0 +1,4 @@
+node_modules/
+dist/
+# Local data: collections, variable sets (tokens/passwords), history, settings
+data/
