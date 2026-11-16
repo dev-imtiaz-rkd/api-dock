@@ -6,6 +6,7 @@ import {
 } from './model.js';
 import { kvTable, jsonTree, setTreeExpanded, highlightJson, highlightMarkup, findInView, clearFind } from './viewers.js';
 import { app } from './bus.js';
+import { attachVarHover, markVars, closeVarPopover } from './varpop.js';
 
 // ---------- input with {{variable}} highlighting ----------
 export function varInput({ value, placeholder, onInput, collectionId, cls = '', onEnter }) {
@@ -13,18 +14,17 @@ export function varInput({ value, placeholder, onInput, collectionId, cls = '', 
   const input = h('input', { class: 'var-text', value: value || '', placeholder: placeholder || '', spellcheck: false, autocomplete: 'off' });
   const paint = () => {
     const scope = variableScope(collectionId);
-    mirror.innerHTML =
-      escapeHtml(input.value).replace(/\{\{\s*([^{}\s]+)\s*\}\}/g, (m, name) => {
-        const ok = name.startsWith('$') || scope.has(name);
-        return `<span class="${ok ? 'var-ok' : 'var-missing'}">${m}</span>`;
-      }) + ' ';
+    mirror.innerHTML = markVars(escapeHtml(input.value), scope) + ' ';
     mirror.scrollLeft = input.scrollLeft;
     const vars = [...input.value.matchAll(VAR_RE)].map((m) => m[1]);
-    input.title = vars.length
+    // With a collection the hover popover shows (and edits) values instead of a tooltip.
+    input.title = vars.length && !collectionId
       ? vars.map((n) => `${n} = ${scope.has(n) ? scope.get(n).value || '(empty)' : n.startsWith('$') ? '(dynamic)' : '⚠ not defined'}`).join('\n')
       : '';
   };
+  attachVarHover(input, mirror, () => collectionId);
   input.addEventListener('input', () => {
+    closeVarPopover();
     paint();
     onInput(input.value);
   });
@@ -35,6 +35,7 @@ export function varInput({ value, placeholder, onInput, collectionId, cls = '', 
   const wrap = h('div', { class: `var-input ${cls}` }, mirror, input);
   wrap.input = input;
   wrap.repaint = paint;
+  wrap.repaintVars = paint;
   wrap.setValue = (v) => {
     input.value = v;
     paint();
@@ -43,18 +44,15 @@ export function varInput({ value, placeholder, onInput, collectionId, cls = '', 
 }
 
 // ---------- code editor (textarea + highlight layer) ----------
-export function codeEditor({ value, lang, onInput, placeholder, readOnly }) {
+export function codeEditor({ value, lang, onInput, placeholder, readOnly, collectionId }) {
   const pre = h('pre', { class: 'code-hl', 'aria-hidden': 'true' });
   const ta = h('textarea', { class: 'code-ta', spellcheck: false, value: value || '', placeholder: placeholder || '', readOnly: !!readOnly });
   const gutter = h('div', { class: 'code-gutter', 'aria-hidden': 'true' });
   let language = lang;
   const paint = () => {
     const t = ta.value;
-    pre.innerHTML =
-      (language === 'json' ? highlightJson(t) : language === 'xml' || language === 'html' ? highlightMarkup(t) : escapeHtml(t)).replace(
-        /\{\{\s*([^{}\s]+)\s*\}\}/g,
-        '<span class="var-ok">$&</span>',
-      ) + '\n';
+    const html = language === 'json' ? highlightJson(t) : language === 'xml' || language === 'html' ? highlightMarkup(t) : escapeHtml(t);
+    pre.innerHTML = markVars(html, collectionId ? variableScope(collectionId) : null) + '\n';
     const lines = t.split('\n').length;
     if (gutter.childElementCount !== lines) gutter.textContent = Array.from({ length: lines }, (_, i) => i + 1).join('\n');
     sync();
@@ -65,9 +63,11 @@ export function codeEditor({ value, lang, onInput, placeholder, readOnly }) {
     gutter.scrollTop = ta.scrollTop;
   };
   ta.addEventListener('input', () => {
+    closeVarPopover();
     paint();
     onInput && onInput(ta.value);
   });
+  if (collectionId) attachVarHover(ta, pre, () => collectionId);
   ta.addEventListener('scroll', sync);
   ta.addEventListener('keydown', (e) => {
     if (e.key === 'Tab' && !readOnly) {
@@ -88,6 +88,7 @@ export function codeEditor({ value, lang, onInput, placeholder, readOnly }) {
     paint();
   };
   el.textarea = ta;
+  el.repaintVars = paint;
   return el;
 }
 
@@ -241,6 +242,7 @@ export function renderRequestTab(tab, root) {
     resolved.replaceChildren(...parts.filter(Boolean));
   }
   updateResolved();
+  resolved.repaintVars = updateResolved;
 
   const address = h('div', { class: 'address' }, h('div', { class: 'address-line' }, methodBtn, urlIn, sendBtn), resolved);
 
@@ -301,7 +303,7 @@ export function renderRequestTab(tab, root) {
     } else if (tab.sub === 'auth') {
       subBody.append(authEditor(req, tab.collectionId, after, true));
     } else if (tab.sub === 'body') {
-      subBody.append(bodyEditor(req, after));
+      subBody.append(bodyEditor(req, after, tab.collectionId));
     } else if (tab.sub === 'docs') {
       subBody.append(
         h('textarea', {
@@ -460,7 +462,7 @@ function passwordVar(value, onInput, collectionId, ph) {
 }
 
 // ---------- body ----------
-function bodyEditor(req, onChange) {
+function bodyEditor(req, onChange, collectionId) {
   const b = req.body;
   const wrap = h('div', { class: 'body-editor' });
   const MODES = [
@@ -493,6 +495,7 @@ function bodyEditor(req, onChange) {
       editor = codeEditor({
         value: b.raw,
         lang: b.rawType,
+        collectionId,
         placeholder: b.rawType === 'json' ? '{\n  "name": "value"\n}' : '',
         onInput: (v) => {
           b.raw = v;

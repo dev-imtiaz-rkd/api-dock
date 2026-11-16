@@ -174,6 +174,31 @@ export function highlightMarkup(text) {
 
 // ---------- key/value table ----------
 // rows: array mutated in place. opts: { onChange, keyPh, valuePh, files, descriptions, readOnlyKeys, bulk }
+// Form-data value types. Multipart only carries text or files, so Number,
+// Boolean and JSON are sent as text; the type picks the editor and checks the value.
+export const FIELD_TYPES = [
+  ['text', 'Text'],
+  ['number', 'Number'],
+  ['boolean', 'Boolean'],
+  ['json', 'JSON'],
+  ['file', 'File'],
+];
+const HAS_VAR = /\{\{[^{}]+\}\}/;
+
+function fieldProblem(type, value) {
+  const v = String(value ?? '').trim();
+  if (!v || HAS_VAR.test(v)) return '';
+  if (type === 'number' && !/^-?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(v)) return 'Not a number';
+  if (type === 'json') {
+    try {
+      JSON.parse(v);
+    } catch (e) {
+      return 'Invalid JSON: ' + e.message.replace(/^JSON\.parse: /, '');
+    }
+  }
+  return '';
+}
+
 export function kvTable(rows, opts = {}) {
   const { onChange = () => {}, keyPh = 'Key', valuePh = 'Value', files = false, descriptions = false, readOnlyKeys = false } = opts;
   let bulkMode = false;
@@ -217,18 +242,46 @@ export function kvTable(rows, opts = {}) {
     });
 
     let valueCell;
-    const valIn = () =>
-      h('input', {
+    const valIn = () => {
+      const type = files ? r.type || 'text' : 'text';
+      if (type === 'boolean') {
+        if (!['true', 'false', '1', '0'].includes(r.value)) r.value = 'true';
+        const sel = h(
+          'select',
+          {
+            class: 'kv-input kv-bool',
+            onChange: (e) => {
+              r.value = e.target.value;
+              promote();
+              emit();
+            },
+          },
+          ...['true', 'false', '1', '0'].map((v) => h('option', { value: v }, v)),
+        );
+        sel.value = r.value;
+        return sel;
+      }
+      const input = h('input', {
         class: 'kv-input',
-        placeholder: valuePh,
+        placeholder: type === 'number' ? '0' : type === 'json' ? '{"key": "value"}' : valuePh,
         value: r.value || '',
         spellcheck: false,
+        inputMode: type === 'number' ? 'decimal' : undefined,
         onInput: (e) => {
           r.value = e.target.value;
+          check();
           promote();
           emit();
         },
       });
+      const check = () => {
+        const problem = fieldProblem(type, input.value);
+        input.classList.toggle('kv-invalid', !!problem);
+        input.title = problem;
+      };
+      check();
+      return input;
+    };
     const fileIn = () => {
       const label = h('span', { class: 'file-name' }, r.fileName ? (r.fileData ? r.fileName : `${r.fileName} (re-select file)`) : 'Choose file…');
       const input = h('input', {
@@ -262,15 +315,17 @@ export function kvTable(rows, opts = {}) {
           'select',
           {
             class: 'kv-type',
+            title: 'Value type',
             onChange: (e) => {
+              const was = r.type;
               r.type = e.target.value;
+              if (was === 'boolean' || (r.type === 'boolean' && was !== 'boolean')) r.value = r.type === 'boolean' ? 'true' : '';
               renderValue();
               promote();
               emit();
             },
           },
-          h('option', { value: 'text' }, 'Text'),
-          h('option', { value: 'file' }, 'File'),
+          ...FIELD_TYPES.map(([v, label]) => h('option', { value: v }, label)),
         )
       : null;
     if (typeSel) typeSel.value = r.type || 'text';
@@ -303,12 +358,15 @@ export function kvTable(rows, opts = {}) {
       icon('trash', 14),
     );
 
+    // Element.append() would print a literal "null", so drop the empty cells.
     tr.append(
-      h('div', { class: 'kv-cell kv-cb' }, cb),
-      h('div', { class: 'kv-cell kv-key' }, keyIn, typeSel),
-      valueCell,
-      descriptions ? h('div', { class: 'kv-cell kv-desc' }, desc) : null,
-      h('div', { class: 'kv-cell kv-actions' }, readOnlyKeys ? null : del),
+      ...[
+        h('div', { class: 'kv-cell kv-cb' }, cb),
+        h('div', { class: 'kv-cell kv-key' }, keyIn, typeSel),
+        valueCell,
+        descriptions ? h('div', { class: 'kv-cell kv-desc' }, desc) : null,
+        h('div', { class: 'kv-cell kv-actions' }, readOnlyKeys ? null : del),
+      ].filter(Boolean),
     );
     return tr;
   }
