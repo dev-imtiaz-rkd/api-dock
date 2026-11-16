@@ -885,6 +885,11 @@ document.addEventListener('keydown', (e) => {
   } else if (k === 'o') {
     e.preventDefault();
     openImport();
+  } else if (k === 'f' && document.querySelector('.res-find-input')) {
+    e.preventDefault();
+    const box = document.querySelector('.res-find-input');
+    box.focus();
+    box.select();
   } else if (k === 'k') {
     e.preventDefault();
     document.querySelector('.pane-search')?.focus();

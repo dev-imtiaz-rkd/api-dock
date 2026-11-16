@@ -818,3 +818,14 @@ button.pane-title:hover { color: var(--accent-ink); }
 .uc-notes p { white-space: pre-wrap; margin-top: 4px; max-height: 140px; overflow: auto; }
 .update-tile { color: var(--accent) !important; }
 .about-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0 14px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+
+/* ---------- find in response ---------- */
+.res-find { display: flex; align-items: center; gap: 4px; height: 28px; width: 230px; margin-right: 6px; padding: 0 2px 0 8px; border-radius: 8px; color: var(--mute); background: var(--hover); }
+.res-find:focus-within { background: var(--raise); box-shadow: inset 0 0 0 1px var(--accent); }
+.res-find-input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--ink); font-size: 12.5px; }
+.res-find-count { font-size: 11px; color: var(--faint); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.res-find-count.none { color: var(--warn); }
+.res-find .btn-icon.sm { width: 22px; height: 22px; border-radius: 6px; }
+.res-find .rot-up { display: inline-grid; transform: rotate(180deg); }
+::highlight(res-find) { background-color: oklch(0.9 0.12 95); color: #1f1d1a; }
+::highlight(res-find-current) { background-color: oklch(0.75 0.17 60); color: #1f1d1a; }

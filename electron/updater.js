@@ -1,7 +1,20 @@
-// Auto-update from GitHub Releases (kiurd-gentleman/api-dock).
+// Auto-update from the Dhaka server (https://apidock.ebareidechutionek.cfd/updates/).
 // Checks shortly after start and every few hours; the page shows the result and
 // one click downloads the update and restarts into it.
 const { app, ipcMain } = require('electron');
+const fs = require('fs');
+const path = require('path');
+
+// Kept in %APPDATA%\ApiDock\updater.log to diagnose update problems.
+function log(line) {
+  const text = `${new Date().toISOString()} ${line}`;
+  console.log(text);
+  try {
+    const file = path.join(app.getPath('userData'), 'updater.log');
+    if (fs.existsSync(file) && fs.statSync(file).size > 256 * 1024) fs.renameSync(file, `${file}.old`);
+    fs.appendFileSync(file, `${text}\n`);
+  } catch {}
+}
 
 const CHECK_EVERY_MS = 4 * 60 * 60 * 1000;
 const FIRST_CHECK_MS = 10 * 1000;
@@ -13,13 +26,14 @@ let downloading = false;
 
 function send(status) {
   last = status;
+  log(`[updater] ${status.state}${status.version ? ' ' + status.version : ''}${status.percent != null ? ' ' + status.percent + '%' : ''}${status.message ? ' — ' + status.message : ''}`);
   if (win && !win.isDestroyed()) win.webContents.send('update:status', status);
 }
 
 // Installed (NSIS) builds can update themselves; the portable exe and `npm run app` cannot.
 function unsupportedReason() {
   if (!app.isPackaged) return 'Updates are only available in the installed app.';
-  if (process.env.PORTABLE_EXECUTABLE_DIR) return 'The portable version can’t update itself — download the new version from GitHub.';
+  if (process.env.PORTABLE_EXECUTABLE_DIR) return 'The portable version can’t update itself — install the regular version (ApiDock-Setup) to get automatic updates.';
   return null;
 }
 
@@ -67,6 +81,7 @@ function init(mainWindow) {
     setTimeout(restartNow, 1200);
   });
   updater.on('error', (err) => {
+    log(`[updater] raw error: ${String((err && err.stack) || err).split(/\r?\n/).slice(0, 6).join(' | ')}`);
     downloading = false;
     send({ state: 'error', message: friendly(err), version: last.version });
   });

@@ -1,10 +1,10 @@
 // Request tab: URL bar, Params / Auth / Headers / Body / Docs, and the response pane.
-import { h, icon, api, toast, fmtBytes, fmtMs, statusClass, STATUS_TEXT, copyText, downloadBlob, selectEl, escapeHtml, showMenu, modal } from './util.js';
+import { h, icon, api, toast, fmtBytes, fmtMs, statusClass, STATUS_TEXT, copyText, downloadBlob, selectEl, escapeHtml, showMenu, modal, debounce } from './util.js';
 import {
   S, METHODS, getCollection, findItem, variableScope, effectiveAuth, buildOutgoing, codeSnippet,
   paramsFromUrl, urlWithParams, syncPathVars, VAR_RE, activeEnv,
 } from './model.js';
-import { kvTable, jsonTree, setTreeExpanded, highlightJson, highlightMarkup } from './viewers.js';
+import { kvTable, jsonTree, setTreeExpanded, highlightJson, highlightMarkup, findInView, clearFind } from './viewers.js';
 import { app } from './bus.js';
 
 // ---------- input with {{variable}} highlighting ----------
@@ -682,6 +682,7 @@ export function renderResponse(tab, pane) {
       h('div', { class: 'seg' }, views.map(([k, label]) => h('button', { class: 'seg-btn' + (tab.resView === k ? ' active' : ''), onClick: () => ((tab.resView = k), renderBody()) }, label))),
       h('div', { class: 'spacer' }),
     );
+    clearFind();
 
     if (!r.isText && !isImage) {
       content.append(h('div', { class: 'res-empty' }, icon('file', 30), h('p', {}, `Binary response (${r.contentType || 'unknown type'}, ${fmtBytes(r.size)})`), h('button', { class: 'btn sm', onClick: download }, icon('download', 14), 'Download')));
@@ -689,6 +690,8 @@ export function renderResponse(tab, pane) {
     }
 
     let tree = null;
+    const searchable = tab.resView !== 'preview';
+    if (searchable) toolbar.append(findBox());
     if (tab.resView === 'pretty' && parsed !== undefined) {
       tree = jsonTree(parsed);
       toolbar.append(
@@ -713,6 +716,76 @@ export function renderResponse(tab, pane) {
       h('button', { class: 'btn-icon', title: 'Download response', onClick: download }, icon('download', 15)),
     );
     if (r.truncated) content.prepend(h('div', { class: 'warn-bar' }, 'Response is larger than 10 MB — showing the first 10 MB.'));
+    // Re-apply a search that was typed before (switching Pretty/Raw, coming back to the request).
+    if (searchable && tab.resFind) setTimeout(() => runFind(false), 0);
+  }
+
+  // ---- find in response ----
+  let finder = null;
+  let findInput = null;
+  let findCount = null;
+  function findBox() {
+    findInput = h('input', {
+      class: 'res-find-input',
+      placeholder: 'Find',
+      spellcheck: 'false',
+      value: tab.resFind || '',
+      onInput: debounce(() => {
+        tab.resFind = findInput.value;
+        tab.resFindIdx = 0;
+        runFind(true);
+      }, 120),
+      onKeydown: (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          step(e.shiftKey ? -1 : 1);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          tab.resFind = '';
+          findInput.value = '';
+          runFind(false);
+          findInput.blur();
+        }
+      },
+    });
+    findCount = h('span', { class: 'res-find-count' });
+    return h(
+      'label',
+      { class: 'res-find', title: 'Find in response (Ctrl F) · Enter next · Shift Enter previous' },
+      icon('search', 13),
+      findInput,
+      findCount,
+      h('button', { class: 'btn-icon sm', title: 'Previous match (Shift Enter)', onClick: (e) => (e.preventDefault(), step(-1)) }, h('span', { class: 'rot-up' }, icon('chevronDown', 13))),
+      h('button', { class: 'btn-icon sm', title: 'Next match (Enter)', onClick: (e) => (e.preventDefault(), step(1)) }, icon('chevronDown', 13)),
+    );
+  }
+
+  function runFind(scroll) {
+    const q = tab.resFind || '';
+    const scroller = content.querySelector('.res-scroll');
+    if (!scroller || !scroller.isConnected) return;
+    const tree = scroller.querySelector('.json-tree');
+    // Matches can sit inside collapsed objects: open everything while searching.
+    if (q && tree) setTreeExpanded(tree, true);
+    finder = findInView(scroller, q);
+    if (tab.resFindIdx >= finder.count) tab.resFindIdx = 0;
+    updateCount();
+    if (finder.count) finder.show(tab.resFindIdx || 0, scroll);
+  }
+
+  function step(dir) {
+    if (!finder || !finder.count) return runFind(true);
+    tab.resFindIdx = ((tab.resFindIdx || 0) + dir + finder.count) % finder.count;
+    finder.show(tab.resFindIdx);
+    updateCount();
+  }
+
+  function updateCount() {
+    if (!findCount) return;
+    const q = tab.resFind || '';
+    findCount.textContent = !q ? '' : finder.count ? `${(tab.resFindIdx || 0) + 1}/${finder.count}${finder.capped ? '+' : ''}` : 'No results';
+    findCount.classList.toggle('none', !!q && !finder.count);
   }
 
   function download() {

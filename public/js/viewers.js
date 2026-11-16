@@ -83,6 +83,74 @@ export function setTreeExpanded(root, expanded) {
   }
 }
 
+// ---------- find in response ----------
+// Highlights every case-insensitive match of `query` inside `root` using the
+// CSS Custom Highlight API (no DOM changes, so the tree stays intact).
+const MAX_MATCHES = 5000;
+const canHighlight = typeof CSS !== 'undefined' && CSS.highlights && typeof Highlight !== 'undefined';
+
+export function clearFind() {
+  if (canHighlight) {
+    CSS.highlights.delete('res-find');
+    CSS.highlights.delete('res-find-current');
+  }
+}
+
+export function findInView(root, query) {
+  clearFind();
+  const q = query.toLowerCase();
+  if (!q) return { count: 0, capped: false, show() {} };
+
+  // Visible text only (skip collapsed summaries / hidden closers).
+  const visible = new Map();
+  const isVisible = (el) => {
+    if (!visible.has(el)) visible.set(el, el.checkVisibility ? el.checkVisibility() : !!el.offsetParent);
+    return visible.get(el);
+  };
+  const nodes = [];
+  let text = '';
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (!n.nodeValue || !isVisible(n.parentElement)) continue;
+    nodes.push({ node: n, start: text.length });
+    text += n.nodeValue;
+  }
+  const lower = text.toLowerCase();
+
+  // Map an offset in the joined text back to (text node, offset).
+  let cursor = 0;
+  const locate = (offset, end) => {
+    while (cursor < nodes.length - 1 && (end ? nodes[cursor + 1].start < offset : nodes[cursor + 1].start <= offset)) cursor++;
+    const { node, start } = nodes[cursor];
+    return [node, offset - start];
+  };
+
+  const ranges = [];
+  for (let i = lower.indexOf(q); i !== -1 && ranges.length < MAX_MATCHES; i = lower.indexOf(q, i + q.length)) {
+    const range = new Range();
+    range.setStart(...locate(i, false));
+    range.setEnd(...locate(i + q.length, true));
+    ranges.push(range);
+  }
+  if (canHighlight && ranges.length) CSS.highlights.set('res-find', new Highlight(...ranges));
+
+  return {
+    count: ranges.length,
+    capped: ranges.length >= MAX_MATCHES,
+    show(index) {
+      const range = ranges[index];
+      if (!range) return;
+      if (canHighlight) CSS.highlights.set('res-find-current', new Highlight(range));
+      const el = range.startContainer.parentElement;
+      const scroller = root.closest('.res-scroll') || root;
+      const box = range.getBoundingClientRect();
+      const view = scroller.getBoundingClientRect();
+      if (box.top < view.top + 24 || box.bottom > view.bottom - 24) scroller.scrollTop += box.top - view.top - view.height / 3;
+      if (box.left < view.left || box.right > view.right) el.scrollIntoView({ block: 'nearest', inline: 'center' });
+    },
+  };
+}
+
 // ---------- syntax highlighting ----------
 export function highlightJson(text) {
   return escapeHtml(text).replace(

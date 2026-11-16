@@ -567,12 +567,98 @@ route('PUT', '/api/collections/:id/access', (req, res, { user, params, body }) =
   return { ok: true };
 });
 
+// ---------- app updates ----------
+// nginx serves UPDATES_DIR at /updates/ for the in-app updater. New releases are
+// uploaded here by `npm run release`. The server only keeps the SHA-256 of the
+// release token (UPDATES_TOKEN_SHA256); the token itself stays with the releaser.
+const UPDATES_DIR = process.env.UPDATES_DIR || path.join(__dirname, 'updates');
+const UPDATES_TOKEN_SHA256 = (process.env.UPDATES_TOKEN_SHA256 || '').toLowerCase();
+const UPDATE_FILE = /^(ApiDock-Setup-\d+\.\d+\.\d+\.exe(\.blockmap)?|latest\.yml)$/;
+const MAX_UPDATE_BYTES = 400 * 1024 * 1024;
+
+function handleUpdateUpload(req, res, name) {
+  const given = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  const ok = /^[0-9a-f]{64}$/.test(UPDATES_TOKEN_SHA256) && given && crypto.timingSafeEqual(Buffer.from(sha256(given)), Buffer.from(UPDATES_TOKEN_SHA256));
+  if (!ok) return send(res, 401, { error: 'Bad release token' });
+  if (!UPDATE_FILE.test(name)) return send(res, 400, { error: 'File name not allowed' });
+  fs.mkdirSync(UPDATES_DIR, { recursive: true });
+  const tmp = path.join(UPDATES_DIR, `.upload-${process.pid}-${Date.now()}-${name}`);
+  const out = fs.createWriteStream(tmp, { mode: 0o644 });
+  const hash = crypto.createHash('sha512');
+  let size = 0;
+  let failed = false;
+  const abort = (status, message) => {
+    if (failed) return;
+    failed = true;
+    out.destroy();
+    fs.rm(tmp, { force: true }, () => {});
+    if (!res.headersSent) send(res, status, { error: message });
+  };
+  req.on('data', (chunk) => {
+    size += chunk.length;
+    if (size > MAX_UPDATE_BYTES) return abort(413, 'File too large'), req.destroy();
+    hash.update(chunk);
+    if (!out.write(chunk)) req.pause();
+  });
+  out.on('drain', () => req.resume());
+  req.on('error', () => abort(400, 'Upload interrupted'));
+  req.on('end', () => {
+    if (failed) return;
+    out.end(() => {
+      // Atomic replace: the updater never sees a half-written file.
+      fs.rename(tmp, path.join(UPDATES_DIR, name), (err) => {
+        if (err) return abort(500, 'Could not store the file');
+        send(res, 200, { ok: true, name, size, sha512: hash.digest('base64') });
+      });
+    });
+  });
+}
+
+// ---------- download page ----------
+// The newest published installer, as described by the updater's latest.yml.
+function latestRelease() {
+  try {
+    const yml = fs.readFileSync(path.join(UPDATES_DIR, 'latest.yml'), 'utf8');
+    const version = (yml.match(/^version:\s*(.+)$/m) || [])[1];
+    const file = (yml.match(/^path:\s*(.+)$/m) || yml.match(/-\s*url:\s*(.+)$/m) || [])[1];
+    const size = Number((yml.match(/^\s+size:\s*(\d+)/m) || [])[1]) || 0;
+    const date = (yml.match(/^releaseDate:\s*'?([^'\n]+)/m) || [])[1];
+    if (!version || !file || !fs.existsSync(path.join(UPDATES_DIR, file.trim()))) return null;
+    return { version: version.trim(), file: file.trim(), size, date };
+  } catch {
+    return null;
+  }
+}
+
+function downloadPage() {
+  const rel = latestRelease();
+  const btn = 'display:block;text-align:center;margin:18px 0 10px;padding:12px 16px;border-radius:10px;background:#1f1d1a;color:#f4f2ec;text-decoration:none;font-weight:600';
+  const when = rel && rel.date ? new Date(rel.date).toISOString().slice(0, 10) : '';
+  const dl = rel
+    ? `<a href="/download" style="${btn}">Download for Windows</a>
+<p style="font-size:13px">Version ${esc(rel.version)} · ${(rel.size / 1048576).toFixed(0)} MB${when ? ' · ' + when : ''}</p>`
+    : '<p><b>No release published yet.</b></p>';
+  return page('ApiDock', `<h1>ApiDock</h1>
+<p>A desktop API client: import Postman collections, keep variable sets per collection, send requests and read responses — and share collections with your team.</p>
+${dl}
+<p style="font-size:13px">Windows may show “Windows protected your PC” because the installer isn’t code-signed yet — click <b>More info → Run anyway</b>.</p>
+<p style="font-size:13px">After installing, open <b>Team</b> (bottom-left) to create an account or sign in. The app updates itself when a new version is out.</p>`);
+}
+
 // ---------- server ----------
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, PUBLIC_URL);
+  if (req.method === 'PUT' && url.pathname.startsWith('/admin/updates/')) {
+    return handleUpdateUpload(req, res, decodeURIComponent(url.pathname.slice('/admin/updates/'.length)));
+  }
   try {
-    if (req.method === 'GET' && url.pathname === '/') {
-      return send(res, 200, page('ApiDock Team', '<h1>ApiDock Team server</h1><p>This server keeps shared collections for ApiDock teams. Open the ApiDock app and use <b>Team</b> to sign in or create an account.</p>'));
+    if (req.method === 'GET' && url.pathname === '/') return send(res, 200, downloadPage());
+    // Short, shareable link that always points at the newest installer.
+    if (req.method === 'GET' && url.pathname === '/download') {
+      const rel = latestRelease();
+      if (!rel) return send(res, 404, page('ApiDock', '<h1>No release yet</h1><p>Check back soon.</p>'));
+      res.writeHead(302, { Location: `/updates/${encodeURIComponent(rel.file)}`, 'Cache-Control': 'no-store' });
+      return res.end();
     }
     if (req.method === 'GET' && url.pathname === '/health') return send(res, 200, { ok: true, google: !!GOOGLE_CLIENT_ID });
     for (const r of routes) {

@@ -27,6 +27,20 @@ npm start          # or: plain server at http://localhost:4000 (data in ./data)
 npm run build      # → dist/ApiDock-Setup-<version>.exe and dist/ApiDock-<version>-portable.exe
 ```
 
+**Publish an update** (installed apps pick it up automatically):
+
+```bash
+# 1. raise "version" in package.json   2. commit   3.
+npm run release
+```
+
+The release script builds the installer, checks its checksums, and uploads
+it to `https://apidock.ebareidechutionek.cfd/updates/`. It needs
+`.release.env` (git-ignored) with `UPDATES_URL` and `UPDATES_TOKEN`; the
+server keeps only the token's SHA-256. Installed apps check 10 seconds after
+start and every 4 hours, and show a card. One click downloads the update and
+restarts into it.
+
 If `npm install` skips Electron's download (npm's install-script policy), run
 `node node_modules/electron/install.js` once.
 

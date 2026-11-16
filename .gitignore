@@ -4,3 +4,5 @@ dist/
 data/
 cloud/.env
 cloud/*.db*
+dist-test/
+.release.env
