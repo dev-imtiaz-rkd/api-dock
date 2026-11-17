@@ -8,10 +8,12 @@ Laravel apps from it).
 
 ## Run
 
-**Desktop app (Windows):** install `dist/ApiDock-Setup-1.0.0.exe`, or run
-`dist/ApiDock-1.0.0-portable.exe` without installing. The app runs its own
-local server on a free port, so nothing else needs to be running. Its data
-lives in `%APPDATA%\ApiDock\data`.
+**Desktop app:** download it for Windows, macOS or Linux from
+https://apidock.ebareidechutionek.cfd/. The app runs its own local server on a
+free port, so nothing else needs to be running. Its data lives in the per-user
+app folder (`%APPDATA%\ApiDock\data` on Windows,
+`~/Library/Application Support/ApiDock/data` on macOS, `~/.config/ApiDock/data`
+on Linux).
 
 **From source:**
 
@@ -21,25 +23,35 @@ npm run app        # desktop window (Electron)
 npm start          # or: plain server at http://localhost:4000 (data in ./data)
 ```
 
-**Build the Windows installer and portable exe:**
+**Build on this machine:**
 
 ```bash
-npm run build      # → dist/ApiDock-Setup-<version>.exe and dist/ApiDock-<version>-portable.exe
+npm run build        # Windows → dist/ApiDock-Setup-<version>.exe and the portable exe
+npm run build:mac    # macOS only (dmg + zip, Apple Silicon and Intel)
+npm run build:linux  # Linux (AppImage + deb); best run on Linux
 ```
 
-**Publish an update** (installed apps pick it up automatically):
+**Publish an update** for all three platforms (installed apps pick it up):
 
 ```bash
-# 1. raise "version" in package.json   2. commit   3.
-npm run release
+# 1. raise "version" in package.json, commit and push
+git tag v1.2.3 && git push origin v1.2.3   # 2. GitHub Actions builds Windows, macOS, Linux
+npm run release                            # 3. waits for that build, uploads it to the server
 ```
 
-The release script builds the installer, checks its checksums, and uploads
-it to `https://apidock.ebareidechutionek.cfd/updates/`. It needs
-`.release.env` (git-ignored) with `UPDATES_URL` and `UPDATES_TOKEN`; the
-server keeps only the token's SHA-256. Installed apps check 10 seconds after
-start and every 4 hours, and show a card. One click downloads the update and
-restarts into it.
+The **Build** workflow (`.github/workflows/build.yml`) attaches every installer
+to the GitHub Release for the tag. `npm run release` downloads them, checks each
+against its `latest*.yml`, and uploads them to
+`https://apidock.ebareidechutionek.cfd/updates/` — installers first, the
+`latest*.yml` manifests last. It needs `.release.env` (git-ignored) with
+`UPDATES_URL` and `UPDATES_TOKEN`; the server keeps only the token's SHA-256.
+`npm run release -- --local` still builds and publishes Windows only, from this
+machine.
+
+Installed apps check 10 seconds after start and every 4 hours, and show a card.
+On Windows and Linux one click downloads the update and restarts into it. The
+macOS build isn't code-signed, and macOS only lets signed apps update
+themselves, so there the card opens the download page instead.
 
 If `npm install` skips Electron's download (npm's install-script policy), run
 `node node_modules/electron/install.js` once.

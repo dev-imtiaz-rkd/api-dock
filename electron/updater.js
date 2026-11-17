@@ -1,7 +1,7 @@
 // Auto-update from the Dhaka server (https://apidock.ebareidechutionek.cfd/updates/).
 // Checks shortly after start and every few hours; the page shows the result and
 // one click downloads the update and restarts into it.
-const { app, ipcMain } = require('electron');
+const { app, ipcMain, shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
@@ -15,6 +15,11 @@ function log(line) {
     fs.appendFileSync(file, `${text}\n`);
   } catch {}
 }
+
+// macOS only installs updates into code-signed apps, and ours isn't signed yet:
+// there the app still checks, but "Update" opens the download page instead.
+const DOWNLOAD_PAGE = 'https://apidock.ebareidechutionek.cfd/';
+const MANUAL_INSTALL = process.platform === 'darwin';
 
 const CHECK_EVERY_MS = 4 * 60 * 60 * 1000;
 const FIRST_CHECK_MS = 10 * 1000;
@@ -49,6 +54,10 @@ function init(mainWindow) {
   });
   ipcMain.handle('update:install', async () => {
     if (reason || !updater) return { state: 'unsupported', message: reason };
+    if (MANUAL_INSTALL) {
+      shell.openExternal(DOWNLOAD_PAGE);
+      return { ...last, message: 'Opened the download page — install the new version over this one.' };
+    }
     if (last.state === 'downloaded') return restartNow();
     if (downloading) return last;
     downloading = true;

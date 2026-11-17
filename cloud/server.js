@@ -573,7 +573,7 @@ route('PUT', '/api/collections/:id/access', (req, res, { user, params, body }) =
 // release token (UPDATES_TOKEN_SHA256); the token itself stays with the releaser.
 const UPDATES_DIR = process.env.UPDATES_DIR || path.join(__dirname, 'updates');
 const UPDATES_TOKEN_SHA256 = (process.env.UPDATES_TOKEN_SHA256 || '').toLowerCase();
-const UPDATE_FILE = /^(ApiDock-Setup-\d+\.\d+\.\d+\.exe(\.blockmap)?|latest\.yml)$/;
+const UPDATE_FILE = /^(ApiDock-Setup-\d+\.\d+\.\d+\.exe(\.blockmap)?|ApiDock-\d+\.\d+\.\d+-(mac|linux)-[a-z0-9_]+\.(dmg|zip|AppImage|deb)(\.blockmap)?|latest(-mac|-linux)?\.yml)$/;
 const MAX_UPDATE_BYTES = 400 * 1024 * 1024;
 
 function handleUpdateUpload(req, res, name) {
@@ -615,34 +615,86 @@ function handleUpdateUpload(req, res, name) {
 }
 
 // ---------- download page ----------
-// The newest published installer, as described by the updater's latest.yml.
-function latestRelease() {
+// The newest published build of each platform, as described by the updater's
+// latest*.yml (Windows: latest.yml, macOS: latest-mac.yml, Linux: latest-linux.yml).
+function readManifest(name) {
   try {
-    const yml = fs.readFileSync(path.join(UPDATES_DIR, 'latest.yml'), 'utf8');
-    const version = (yml.match(/^version:\s*(.+)$/m) || [])[1];
-    const file = (yml.match(/^path:\s*(.+)$/m) || yml.match(/-\s*url:\s*(.+)$/m) || [])[1];
-    const size = Number((yml.match(/^\s+size:\s*(\d+)/m) || [])[1]) || 0;
+    const yml = fs.readFileSync(path.join(UPDATES_DIR, name), 'utf8');
+    const version = ((yml.match(/^version:\s*(.+)$/m) || [])[1] || '').trim();
     const date = (yml.match(/^releaseDate:\s*'?([^'\n]+)/m) || [])[1];
-    if (!version || !file || !fs.existsSync(path.join(UPDATES_DIR, file.trim()))) return null;
-    return { version: version.trim(), file: file.trim(), size, date };
+    const files = [...yml.matchAll(/-\s*url:\s*(.+)\r?\n(?:\s+\w+:.*\r?\n)*?\s+size:\s*(\d+)/g)].map(([, url, size]) => ({ file: url.trim(), size: Number(size) }));
+    if (!version) return null;
+    return { version, date, files };
   } catch {
     return null;
   }
 }
 
-function downloadPage() {
-  const rel = latestRelease();
+const exists = (file) => fs.existsSync(path.join(UPDATES_DIR, file));
+const sizeOf = (file) => {
+  try {
+    return fs.statSync(path.join(UPDATES_DIR, file)).size;
+  } catch {
+    return 0;
+  }
+};
+
+// Every download, keyed by what /download?os=… accepts.
+function downloads() {
+  const out = {};
+  const win = readManifest('latest.yml');
+  const winFile = win && win.files.find((f) => f.file.endsWith('.exe'));
+  if (winFile && exists(winFile.file)) out.windows = { label: 'Windows', note: 'Installer (.exe)', version: win.version, date: win.date, file: winFile.file, size: winFile.size };
+  const mac = readManifest('latest-mac.yml');
+  if (mac) {
+    for (const [arch, label] of [['arm64', 'Apple Silicon (M1–M4)'], ['x64', 'Intel']]) {
+      const file = `ApiDock-${mac.version}-mac-${arch}.dmg`;
+      if (exists(file)) out[`mac-${arch}`] = { label: 'macOS', note: label, version: mac.version, date: mac.date, file, size: sizeOf(file) };
+    }
+  }
+  const linux = readManifest('latest-linux.yml');
+  if (linux) {
+    const appImage = linux.files.find((f) => f.file.endsWith('.AppImage'));
+    if (appImage && exists(appImage.file)) out['linux-appimage'] = { label: 'Linux', note: 'AppImage — any distro', version: linux.version, date: linux.date, file: appImage.file, size: appImage.size };
+    const deb = fs.readdirSync(UPDATES_DIR).find((f) => f === `ApiDock-${linux.version}-linux-amd64.deb` || f === `ApiDock-${linux.version}-linux-x64.deb`);
+    if (deb) out['linux-deb'] = { label: 'Linux', note: 'Debian / Ubuntu (.deb)', version: linux.version, date: linux.date, file: deb, size: sizeOf(deb) };
+  }
+  return out;
+}
+
+// Picks the download for a browser: ?os=… when given, else a guess from the user agent.
+function pickDownload(all, os, ua) {
+  if (os && all[os]) return all[os];
+  if (os === 'mac') return all['mac-arm64'] || all['mac-x64'];
+  if (os === 'linux') return all['linux-appimage'] || all['linux-deb'];
+  if (/Macintosh|Mac OS X/i.test(ua)) return all['mac-arm64'] || all['mac-x64'] || all.windows;
+  if (/Linux|X11/i.test(ua) && !/Android/i.test(ua)) return all['linux-appimage'] || all['linux-deb'] || all.windows;
+  return all.windows || Object.values(all)[0];
+}
+
+function downloadPage(ua) {
+  const all = downloads();
+  const list = Object.entries(all);
+  const best = pickDownload(all, null, ua || '');
   const btn = 'display:block;text-align:center;margin:18px 0 10px;padding:12px 16px;border-radius:10px;background:#1f1d1a;color:#f4f2ec;text-decoration:none;font-weight:600';
-  const when = rel && rel.date ? new Date(rel.date).toISOString().slice(0, 10) : '';
-  const dl = rel
-    ? `<a href="/download" style="${btn}">Download for Windows</a>
-<p style="font-size:13px">Version ${esc(rel.version)} · ${(rel.size / 1048576).toFixed(0)} MB${when ? ' · ' + when : ''}</p>`
+  const row = 'display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid #e7e3d9;font-size:14px;text-decoration:none;color:inherit';
+  const mb = (n) => `${(n / 1048576).toFixed(0)} MB`;
+  const when = best && best.date ? new Date(best.date).toISOString().slice(0, 10) : '';
+  const key = best && list.find(([, d]) => d === best)[0];
+  const dl = best
+    ? `<a href="/download?os=${key}" style="${btn}">Download for ${esc(best.label)}${best.label === 'macOS' ? ` · ${esc(best.note)}` : ''}</a>
+<p style="font-size:13px">Version ${esc(best.version)} · ${mb(best.size)}${when ? ' · ' + when : ''}</p>
+<h2 style="font-size:15px;margin:26px 0 4px">All downloads</h2>
+${list.map(([k, d]) => `<a href="/download?os=${k}" style="${row}"><span><b>${esc(d.label)}</b> · ${esc(d.note)}</span><span style="color:#8a8478">${esc(d.version)} · ${mb(d.size)}</span></a>`).join('\n')}`
     : '<p><b>No release published yet.</b></p>';
   return page('ApiDock', `<h1>ApiDock</h1>
 <p>A desktop API client: import Postman collections, keep variable sets per collection, send requests and read responses — and share collections with your team.</p>
 ${dl}
-<p style="font-size:13px">Windows may show “Windows protected your PC” because the installer isn’t code-signed yet — click <b>More info → Run anyway</b>.</p>
-<p style="font-size:13px">After installing, open <b>Team</b> (bottom-left) to create an account or sign in. The app updates itself when a new version is out.</p>`);
+<h2 style="font-size:15px;margin:26px 0 4px">First start</h2>
+<p style="font-size:13px"><b>Windows</b> may show “Windows protected your PC” because the installer isn’t code-signed yet — click <b>More info → Run anyway</b>.</p>
+<p style="font-size:13px"><b>macOS</b>: open the .dmg and drag ApiDock to Applications. If macOS says it can’t be opened or is damaged, go to <b>System Settings → Privacy &amp; Security → Open Anyway</b>, or run <code>xattr -cr /Applications/ApiDock.app</code> in Terminal. New versions are installed the same way.</p>
+<p style="font-size:13px"><b>Linux</b>: make the AppImage executable (<code>chmod +x ApiDock-*.AppImage</code>) and run it, or install the .deb with <code>sudo apt install ./ApiDock-*.deb</code>.</p>
+<p style="font-size:13px">After installing, open <b>Team</b> (bottom-left) to create an account or sign in. Windows and Linux update themselves; on macOS the app tells you when a new version is out.</p>`);
 }
 
 // ---------- server ----------
@@ -652,10 +704,11 @@ const server = http.createServer(async (req, res) => {
     return handleUpdateUpload(req, res, decodeURIComponent(url.pathname.slice('/admin/updates/'.length)));
   }
   try {
-    if (req.method === 'GET' && url.pathname === '/') return send(res, 200, downloadPage());
-    // Short, shareable link that always points at the newest installer.
+    if (req.method === 'GET' && url.pathname === '/') return send(res, 200, downloadPage(req.headers['user-agent']));
+    // Short, shareable link that always points at the newest installer:
+    // /download picks by browser, /download?os=windows|mac|mac-arm64|mac-x64|linux|linux-appimage|linux-deb
     if (req.method === 'GET' && url.pathname === '/download') {
-      const rel = latestRelease();
+      const rel = pickDownload(downloads(), url.searchParams.get('os'), req.headers['user-agent'] || '');
       if (!rel) return send(res, 404, page('ApiDock', '<h1>No release yet</h1><p>Check back soon.</p>'));
       res.writeHead(302, { Location: `/updates/${encodeURIComponent(rel.file)}`, 'Cache-Control': 'no-store' });
       return res.end();

@@ -1,5 +1,5 @@
 // Collapsible JSON tree, syntax highlighting, and the key/value table editor.
-import { h, icon, escapeHtml } from './util.js';
+import { h, icon, escapeHtml, showMenu } from './util.js';
 import { parseVarText } from './model.js';
 
 // ---------- JSON tree ----------
@@ -177,12 +177,55 @@ export function highlightMarkup(text) {
 // Form-data value types. Multipart only carries text or files, so Number,
 // Boolean and JSON are sent as text; the type picks the editor and checks the value.
 export const FIELD_TYPES = [
-  ['text', 'Text'],
-  ['number', 'Number'],
-  ['boolean', 'Boolean'],
-  ['json', 'JSON'],
-  ['file', 'File'],
+  ['text', 'Text', 'abc'],
+  ['number', 'Number', '123'],
+  ['boolean', 'Boolean', 'true'],
+  ['json', 'JSON', '{ }'],
+  ['file', 'File', 'file'],
 ];
+const BOOL_VALUES = [
+  ['true', 'true'],
+  ['false', 'false'],
+  ['1', '1'],
+  ['0', '0'],
+];
+
+// A themed stand-in for <select>: native option lists ignore the dark theme.
+function menuPick(options, value, onPick, cls) {
+  let current = value;
+  const label = h('span', { class: 'pick-label' });
+  const btn = h(
+    'button',
+    {
+      type: 'button',
+      class: `pick ${cls}`,
+      onClick: (e) => {
+        e.preventDefault();
+        showMenu(
+          btn,
+          options.map(([v, text, hint]) => ({
+            label: text,
+            hint,
+            icon: v === current ? 'check' : null,
+            onClick: () => {
+              if (v === current) return;
+              btn.setValue(v);
+              onPick(v);
+            },
+          })),
+        );
+      },
+    },
+    label,
+    icon('chevron', 12, 'pick-caret'),
+  );
+  btn.setValue = (v) => {
+    current = v;
+    label.textContent = (options.find((o) => o[0] === v) || options[0])[1];
+  };
+  btn.setValue(value);
+  return btn;
+}
 const HAS_VAR = /\{\{[^{}]+\}\}/;
 
 function fieldProblem(type, value) {
@@ -245,21 +288,17 @@ export function kvTable(rows, opts = {}) {
     const valIn = () => {
       const type = files ? r.type || 'text' : 'text';
       if (type === 'boolean') {
-        if (!['true', 'false', '1', '0'].includes(r.value)) r.value = 'true';
-        const sel = h(
-          'select',
-          {
-            class: 'kv-input kv-bool',
-            onChange: (e) => {
-              r.value = e.target.value;
-              promote();
-              emit();
-            },
+        if (!BOOL_VALUES.some(([v]) => v === r.value)) r.value = 'true';
+        return menuPick(
+          BOOL_VALUES,
+          r.value,
+          (v) => {
+            r.value = v;
+            promote();
+            emit();
           },
-          ...['true', 'false', '1', '0'].map((v) => h('option', { value: v }, v)),
+          'kv-bool',
         );
-        sel.value = r.value;
-        return sel;
       }
       const input = h('input', {
         class: 'kv-input',
@@ -311,24 +350,21 @@ export function kvTable(rows, opts = {}) {
     renderValue();
 
     const typeSel = files
-      ? h(
-          'select',
-          {
-            class: 'kv-type',
-            title: 'Value type',
-            onChange: (e) => {
-              const was = r.type;
-              r.type = e.target.value;
-              if (was === 'boolean' || (r.type === 'boolean' && was !== 'boolean')) r.value = r.type === 'boolean' ? 'true' : '';
-              renderValue();
-              promote();
-              emit();
-            },
+      ? menuPick(
+          FIELD_TYPES,
+          r.type || 'text',
+          (v) => {
+            const was = r.type;
+            r.type = v;
+            if (was === 'boolean' || v === 'boolean') r.value = v === 'boolean' ? 'true' : '';
+            renderValue();
+            promote();
+            emit();
           },
-          ...FIELD_TYPES.map(([v, label]) => h('option', { value: v }, label)),
+          'kv-type',
         )
       : null;
-    if (typeSel) typeSel.value = r.type || 'text';
+    if (typeSel) typeSel.title = 'Value type';
 
     const desc = descriptions
       ? h('input', {

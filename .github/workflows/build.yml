@@ -1,0 +1,72 @@
+# Builds ApiDock for Windows, macOS and Linux and attaches the files to a
+# GitHub Release. `npm run release` then copies them to the update server.
+#
+# Runs when a version tag is pushed (git tag v1.2.3 && git push origin v1.2.3),
+# or by hand from the Actions tab.
+name: Build
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            args: --win nsis
+          - os: macos-latest
+            args: --mac
+          - os: ubuntu-latest
+            args: --linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build
+        run: npx electron-builder ${{ matrix.args }} --publish never
+        env:
+          # No signing certificates yet: build unsigned (macOS gets an ad-hoc signature).
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.os }}
+          if-no-files-found: error
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.zip
+            dist/*.AppImage
+            dist/*.deb
+            dist/*.blockmap
+            dist/latest*.yml
+            !dist/*.__uninstaller.exe
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: ls -la dist
+      - name: Create or update the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          case "$tag" in v*) ;; *) tag="v$(grep -m1 '^version:' dist/latest.yml | awk '{print $2}')" ;; esac
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "ApiDock ${tag#v}" --notes "Windows, macOS and Linux builds." --target "$GITHUB_SHA"
+          gh release upload "$tag" dist/* --clobber
