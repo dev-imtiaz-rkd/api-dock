@@ -994,7 +994,7 @@ async function boot() {
     document.body.replaceChildren(h('div', { class: 'empty-stage' }, h('h1', {}, 'ApiDock server is not reachable'), h('p', {}, err.message)));
     return;
   }
-  const valid = (ws) => ws && (SYSTEM[ws] || getCollection(ws));
+  const valid = (ws) => ws && ((SYSTEM[ws] && !(SYSTEM[ws].hidden && S.collections.length)) || getCollection(ws));
   S.ws = valid(ui.ws) ? ui.ws : S.collections[0]?.id || 'drafts';
   restoreTabs();
   for (const t of S.tabs) {

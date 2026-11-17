@@ -4,9 +4,11 @@ import { h, icon, api, toast, showMenu, confirmModal, promptModal, statusClass, 
 import { S, uid, newRequest, findItem, countRequests, reassignIds, clone, saveCollection, activeEnv, getCollection, flattenRequests, parseVarText } from './model.js';
 import { app } from './bus.js';
 
+// `hidden` workspaces still exist (Drafts is where the app lands with no
+// collections) but get no button in the dock.
 export const SYSTEM = {
-  drafts: { label: 'Drafts & History', icon: 'history' },
-  services: { label: 'Services', icon: 'server' },
+  drafts: { label: 'Drafts & History', icon: 'history', hidden: true },
+  services: { label: 'Services', icon: 'server', hidden: true },
   team: { label: 'Team', icon: 'users' },
 };
 
@@ -74,7 +76,7 @@ export function renderDock(root) {
     h(
       'div',
       { class: 'dock-sys' },
-      Object.entries(SYSTEM).map(([ws, d]) => {
+      Object.entries(SYSTEM).filter(([, d]) => !d.hidden).map(([ws, d]) => {
         if (ws !== 'team') return tile(ws, d.label, icon(d.icon, 18), null, 'sys');
         const u = S.cloud?.signedIn && S.cloud.user;
         const pending = (S.me?.invites || []).length;

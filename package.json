@@ -1,7 +1,7 @@
 {
   "name": "apidock",
   "productName": "ApiDock",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "description": "A local API client: collections, variable sets, request builder and response viewer.",
   "homepage": "https://apidock.ebareidechutionek.cfd",
   "main": "electron/main.js",
