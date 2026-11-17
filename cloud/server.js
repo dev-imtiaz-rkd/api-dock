@@ -138,16 +138,19 @@ function readJson(req) {
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
+// The app icon (build/icon.svg), used on every page and served as /icon.svg.
+const APP_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect x="16" y="16" width="480" height="480" rx="112" fill="#1f1d1a"/><rect x="16" y="16" width="480" height="480" rx="112" fill="none" stroke="#3a3833" stroke-width="6"/><g fill="none" stroke="#f4f2ec" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"><path d="M256 128 L392 202 L256 276 L120 202 Z"/><path d="M120 268 L256 342 L392 268"/><path d="M120 330 L256 404 L392 330" stroke-opacity="0.55"/></g><circle cx="396" cy="396" r="46" fill="#e8823c" stroke="#1f1d1a" stroke-width="14"/></svg>';
+
 function page(title, body) {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${esc(title)}</title><style>
+<title>${esc(title)}</title><link rel="icon" href="/icon.svg"><style>
 :root{color-scheme:light dark;--bg:#f4f2ec;--fg:#1f1d1a;--mute:#8a8478;--card:#fff;--line:#e7e3d9}
 @media (prefers-color-scheme:dark){:root{--bg:#121211;--fg:#ecebe5;--mute:#8a867c;--card:#1c1c1a;--line:#2a2926}}
 body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--fg);font:15px/1.55 system-ui,'Segoe UI',sans-serif}
 .card{max-width:440px;margin:24px;padding:32px;border:1px solid var(--line);border-radius:16px;background:var(--card)}
-.logo{width:44px;height:44px;border-radius:12px;background:#1f1d1a;color:#f4f2ec;display:grid;place-items:center;font:700 18px monospace;margin-bottom:16px}
+.logo{width:48px;height:48px;margin-bottom:16px}.logo svg{width:100%;height:100%;display:block}
 h1{font-size:20px;margin:0 0 8px}p{margin:0 0 10px;color:var(--mute)}code{font-size:13px}</style></head>
-<body><div class="card"><div class="logo">A</div>${body}</div></body></html>`;
+<body><div class="card"><div class="logo">${APP_ICON}</div>${body}</div></body></html>`;
 }
 
 // ---------- auth ----------
@@ -688,7 +691,7 @@ code{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:.86em;backgrou
 .wrap{max-width:1120px;margin:0 auto;padding:0 24px}
 .nav{display:flex;align-items:center;justify-content:space-between;height:72px}
 .brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;text-decoration:none}
-.mark{width:32px;height:32px;border-radius:9px;background:var(--ink);color:var(--paper);display:grid;place-items:center;font:700 15px 'IBM Plex Mono',monospace}
+.mark{width:34px;height:34px;flex:none}.mark svg{width:100%;height:100%;display:block}
 .nav nav{display:flex;gap:26px;font-size:14px;color:var(--ink-2)}
 .nav nav a{text-decoration:none}.nav nav a:hover{color:var(--ink)}
 .hero{display:grid;grid-template-columns:1fr 1.15fr;gap:56px;align-items:center;padding:56px 24px 88px}
@@ -706,7 +709,8 @@ h1 em{font-style:normal;color:var(--accent)}
 .btn small{font-weight:400;opacity:.65;font-size:13px}
 .meta{margin-top:16px;font-size:13px;color:var(--mute)}
 .shot{position:relative;border-radius:14px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);overflow:hidden;font-size:12.5px;min-width:0}
-.bar{display:flex;gap:6px;padding:11px 14px;border-bottom:1px solid var(--line);background:var(--raise)}
+.bar{display:flex;align-items:center;gap:6px;padding:9px 14px;border-bottom:1px solid var(--line);background:var(--raise)}
+.bar .t{display:flex;align-items:center;gap:7px;margin:0 auto;font-size:12px;font-weight:600;color:var(--ink-2);padding-right:42px}.bar .t svg{width:16px;height:16px}
 .bar i{width:10px;height:10px;border-radius:50%;background:var(--line-2)}
 .app{display:grid;grid-template-columns:170px 1fr;min-height:360px}
 .side{border-right:1px solid var(--line);padding:14px 10px;background:var(--paper)}
@@ -759,7 +763,8 @@ h2{font-size:clamp(28px,3.4vw,38px);letter-spacing:-.03em;line-height:1.1;margin
 .step h3{font-size:15px;margin:0 0 12px;display:flex;gap:10px;align-items:center}
 .step ol{margin:0;padding-left:18px;color:var(--ink-2);font-size:14px}.step li{margin-bottom:8px}
 footer{border-top:1px solid var(--line);padding:30px 0 40px;font-size:13px;color:var(--mute)}
-footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+footer .wrap{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+footer .fb{display:flex;align-items:center;gap:8px}footer .fb svg{width:20px;height:20px}
 @media (max-width:920px){.hero{grid-template-columns:1fr;gap:44px;padding-top:28px}.features,.plats,.steps{grid-template-columns:1fr}.nav nav{display:none}}
 @media (max-width:560px){code{white-space:normal;overflow-wrap:anywhere}.wrap,.hero{padding-left:16px;padding-right:16px}.app{grid-template-columns:1fr}.side{display:none}.pop{right:12px;width:200px}section{padding:60px 0}.cta .btn{width:100%;justify-content:center}}
 `;
@@ -811,13 +816,13 @@ function landingPage(ua) {
 
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ApiDock</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231f1d1a'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='17' font-weight='700' fill='%23f4f2ec' text-anchor='middle'%3EA%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="/icon.svg">
 <meta name="description" content="ApiDock is a desktop API client for Windows, macOS and Linux: import Postman collections, keep variable sets, send requests and share collections with your team.">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>${LANDING_CSS}</style></head><body>
 <header class="wrap nav">
-  <a class="brand" href="/"><span class="mark">A</span>ApiDock</a>
+  <a class="brand" href="/"><span class="mark">${APP_ICON}</span>ApiDock</a>
   <nav><a href="#features">Features</a><a href="#download">Download</a><a href="#install">Install</a></nav>
 </header>
 <main>
@@ -830,7 +835,7 @@ function landingPage(ua) {
     <p class="meta">Free · Windows, macOS and Linux · Updates itself</p>
   </div>
   <div class="shot" aria-hidden="true">
-    <div class="bar"><i></i><i></i><i></i></div>
+    <div class="bar"><i></i><i></i><i></i><span class="t">${APP_ICON}ApiDock</span></div>
     <div class="app">
       <div class="side">
         <b>01 AUTH</b>
@@ -888,7 +893,7 @@ function landingPage(ua) {
   </div>
 </div></section>
 </main>
-<footer><div class="wrap"><span>ApiDock${version ? ` ${esc(version)}` : ''}</span><span>Windows and Linux update themselves. On macOS the app tells you when a new version is out.</span></div></footer>
+<footer><div class="wrap"><span class="fb">${APP_ICON}ApiDock${version ? ` ${esc(version)}` : ''}</span><span>Windows and Linux update themselves. On macOS the app tells you when a new version is out.</span></div></footer>
 </body></html>`;
 }
 
@@ -907,6 +912,10 @@ const server = http.createServer(async (req, res) => {
       if (!rel) return send(res, 404, page('ApiDock', '<h1>No release yet</h1><p>Check back soon.</p>'));
       res.writeHead(302, { Location: `/updates/${encodeURIComponent(rel.file)}`, 'Cache-Control': 'no-store' });
       return res.end();
+    }
+    if (req.method === 'GET' && (url.pathname === '/icon.svg' || url.pathname === '/favicon.ico')) {
+      res.writeHead(200, { 'Content-Type': 'image/svg+xml', 'Cache-Control': 'public, max-age=86400' });
+      return res.end(APP_ICON);
     }
     if (req.method === 'GET' && url.pathname === '/health') return send(res, 200, { ok: true, google: !!GOOGLE_CLIENT_ID });
     for (const r of routes) {
