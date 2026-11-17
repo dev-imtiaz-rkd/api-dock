@@ -34,13 +34,14 @@ npm run build:linux  # Linux (AppImage + deb); best run on Linux
 **Publish an update** for all three platforms (installed apps pick it up):
 
 ```bash
-# 1. raise "version" in package.json, commit and push
-git tag v1.2.3 && git push origin v1.2.3   # 2. GitHub Actions builds Windows, macOS, Linux
+# 1. raise "version" in package.json and commit
+git push                                   # 2. GitHub Actions builds Windows, macOS, Linux
 npm run release                            # 3. waits for that build, uploads it to the server
 ```
 
-The **Build** workflow (`.github/workflows/build.yml`) attaches every installer
-to the GitHub Release for the tag. `npm run release` downloads them, checks each
+The **Build** workflow (`.github/workflows/build.yml`) runs when a new version
+reaches `main` (or a `v*` tag is pushed) and attaches every installer
+to the GitHub Release `v<version>`. `npm run release` downloads them, checks each
 against its `latest*.yml`, and uploads them to
 `https://apidock.ebareidechutionek.cfd/updates/` — installers first, the
 `latest*.yml` manifests last. It needs `.release.env` (git-ignored) with

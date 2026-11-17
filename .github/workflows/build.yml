@@ -1,12 +1,15 @@
 # Builds ApiDock for Windows, macOS and Linux and attaches the files to a
 # GitHub Release. `npm run release` then copies them to the update server.
 #
-# Runs when a version tag is pushed (git tag v1.2.3 && git push origin v1.2.3),
-# or by hand from the Actions tab.
+# Runs when a push to main changes package.json (a version bump) and that
+# version has no release yet, when a v* tag is pushed, or by hand from the
+# Actions tab. The release job creates the v<version> tag itself.
 name: Build
 
 on:
   push:
+    branches: [main]
+    paths: [package.json, .github/workflows/build.yml]
     tags: ['v*']
   workflow_dispatch:
 
@@ -14,7 +17,31 @@ permissions:
   contents: write
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      build: ${{ steps.v.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          # A pushed tag or a manual run always builds; a push to main only for a new version.
+          if [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF_TYPE" = branch ] && gh release view "v$version" >/dev/null 2>&1; then
+            echo "v$version is already released — skipping."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: version
+    if: needs.version.outputs.build == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -53,7 +80,7 @@ jobs:
             !dist/*.__uninstaller.exe
 
   release:
-    needs: build
+    needs: [version, build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -66,7 +93,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          tag="${GITHUB_REF_NAME}"
-          case "$tag" in v*) ;; *) tag="v$(grep -m1 '^version:' dist/latest.yml | awk '{print $2}')" ;; esac
+          tag="v${{ needs.version.outputs.version }}"
           gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "ApiDock ${tag#v}" --notes "Windows, macOS and Linux builds." --target "$GITHUB_SHA"
           gh release upload "$tag" dist/* --clobber

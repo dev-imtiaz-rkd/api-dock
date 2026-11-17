@@ -1,10 +1,9 @@
 // Publishes a release to the Dhaka server, where the in-app updater and the
 // download page pick it up (https://apidock.ebareidechutionek.cfd/updates/).
 //
-//   1. bump "version" in package.json, commit and push
-//   2. git tag v<version> && git push origin v<version>
-//      -> GitHub Actions builds Windows, macOS and Linux and attaches the files
-//         to the GitHub Release v<version> (.github/workflows/build.yml)
+//   1. bump "version" in package.json, commit and push to main
+//   2. GitHub Actions sees the new version, builds Windows, macOS and Linux and
+//      attaches the files to the GitHub Release v<version> (.github/workflows/build.yml)
 //   3. npm run release            (waits for that build, then uploads it)
 //
 //   npm run release -- --local    Windows only, built on this machine (the old way)
@@ -138,7 +137,7 @@ async function downloadFromGitHub() {
     } else if (res.status !== 404) {
       throw new Error(`GitHub: ${res.status} ${await res.text()}`);
     }
-    if (i === 0 && res.status === 404) console.log(`  No release ${tag} yet — did you push the tag?  git tag ${tag} && git push origin ${tag}`);
+    if (i === 0 && res.status === 404) console.log(`  No release ${tag} yet — the build starts when the version bump is pushed to main.`);
     if (i > 120) throw new Error('Gave up after 60 minutes — check the Build workflow on GitHub.');
     await sleep(30_000);
     process.stdout.write('.');
