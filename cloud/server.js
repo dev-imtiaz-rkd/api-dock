@@ -672,29 +672,224 @@ function pickDownload(all, os, ua) {
   return all.windows || Object.values(all)[0];
 }
 
-function downloadPage(ua) {
+// ---------- landing page ----------
+// The public page at /: what ApiDock is, and the right download for each OS.
+const LANDING_CSS = `
+:root{color-scheme:light;--paper:#f4f2ec;--surface:#fbfaf6;--raise:#fff;--line:#e7e3d9;--line-2:#d7d1c3;--ink:#1f1d1a;--ink-2:#4a463f;--mute:#8a8478;--faint:#b9b3a6;
+--accent:#c4562d;--accent-ink:#9c3f1d;--accent-soft:#f6e6dc;--ok:#2f7d4f;--var:#2b6c8f;--var-soft:#e1eef5;--key:#8a3fb0;--str:#2f7d4f;--num:#b5651d;
+--shadow:0 30px 80px rgba(31,29,26,.16),0 4px 14px rgba(31,29,26,.06)}
+@media (prefers-color-scheme:dark){:root{color-scheme:dark;--paper:#121211;--surface:#171715;--raise:#1e1e1b;--line:#2a2926;--line-2:#383631;--ink:#ecebe5;--ink-2:#c4c1b8;--mute:#8f8b80;--faint:#5d5a53;
+--accent:#ec8a5f;--accent-ink:#f2a481;--accent-soft:#3a241a;--ok:#6fcf97;--var:#7cc4e8;--var-soft:#1c2f3a;--key:#d39bf0;--str:#8fd6a8;--num:#f0b27a;--shadow:0 30px 80px rgba(0,0,0,.55),0 4px 14px rgba(0,0,0,.3)}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.6 'IBM Plex Sans',system-ui,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+code{font-family:'IBM Plex Mono',ui-monospace,monospace;font-size:.86em;background:var(--surface);border:1px solid var(--line);border-radius:5px;padding:1px 5px;white-space:nowrap}
+.wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+.nav{display:flex;align-items:center;justify-content:space-between;height:72px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;text-decoration:none}
+.mark{width:32px;height:32px;border-radius:9px;background:var(--ink);color:var(--paper);display:grid;place-items:center;font:700 15px 'IBM Plex Mono',monospace}
+.nav nav{display:flex;gap:26px;font-size:14px;color:var(--ink-2)}
+.nav nav a{text-decoration:none}.nav nav a:hover{color:var(--ink)}
+.hero{display:grid;grid-template-columns:1fr 1.15fr;gap:56px;align-items:center;padding:56px 24px 88px}
+.eyebrow{display:inline-flex;align-items:center;gap:8px;font:500 12px 'IBM Plex Mono',monospace;color:var(--accent-ink);background:var(--accent-soft);border-radius:99px;padding:4px 12px;margin-bottom:22px}
+.eyebrow i{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+h1{font-size:clamp(36px,5vw,56px);line-height:1.04;letter-spacing:-.035em;margin:0 0 20px;font-weight:700}
+h1 em{font-style:normal;color:var(--accent)}
+.lede{font-size:18px;color:var(--ink-2);margin:0 0 30px;max-width:30em}
+.cta{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:10px;height:50px;padding:0 22px;border-radius:12px;font-weight:600;font-size:15px;text-decoration:none;transition:transform .12s,background .12s}
+.btn:hover{transform:translateY(-1px)}
+.btn-primary{background:var(--ink);color:var(--paper)}
+.btn-ghost{border:1px solid var(--line-2);color:var(--ink)}
+.btn-ghost:hover{background:var(--surface)}
+.btn small{font-weight:400;opacity:.65;font-size:13px}
+.meta{margin-top:16px;font-size:13px;color:var(--mute)}
+.shot{position:relative;border-radius:14px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);overflow:hidden;font-size:12.5px;min-width:0}
+.bar{display:flex;gap:6px;padding:11px 14px;border-bottom:1px solid var(--line);background:var(--raise)}
+.bar i{width:10px;height:10px;border-radius:50%;background:var(--line-2)}
+.app{display:grid;grid-template-columns:170px 1fr;min-height:360px}
+.side{border-right:1px solid var(--line);padding:14px 10px;background:var(--paper)}
+.side b{display:block;font-size:10px;letter-spacing:.08em;color:var(--mute);margin:0 6px 8px}
+.side div{display:flex;gap:8px;padding:5px 6px;border-radius:6px;white-space:nowrap;overflow:hidden;color:var(--ink-2)}
+.side div.on{background:var(--accent-soft);color:var(--ink)}
+.m{font:600 9.5px 'IBM Plex Mono',monospace;width:30px;flex:none;padding-top:2px}.m.post{color:var(--num)}.m.get{color:var(--ok)}
+.main{padding:16px;min-width:0}
+.url{display:flex;align-items:center;border:1px solid var(--line);border-radius:9px;background:var(--raise);height:38px;overflow:hidden}
+.url .m{width:auto;padding:0 12px;font-size:11px;border-right:1px solid var(--line);height:100%;display:grid;place-items:center}
+.url .path{padding:0 12px;font-family:'IBM Plex Mono',monospace;white-space:nowrap;overflow:hidden;flex:1}
+.v{color:var(--var);background:var(--var-soft);border-radius:4px;padding:0 2px}
+.send{margin:0 4px 0 auto;background:var(--accent);color:#fff;font-weight:600;border-radius:7px;padding:6px 14px;font-size:12px}
+.tabs{display:flex;gap:16px;margin:14px 2px 10px;color:var(--mute);font-size:12px}.tabs .on{color:var(--ink);font-weight:600;box-shadow:inset 0 -2px var(--accent);padding-bottom:6px}
+.code{font:12px/1.75 'IBM Plex Mono',monospace;background:var(--raise);border:1px solid var(--line);border-radius:9px;padding:10px 14px;white-space:pre;overflow:hidden}
+.k{color:var(--key)}.s{color:var(--str)}.n{color:var(--num)}
+.res{display:flex;align-items:center;gap:10px;margin:14px 2px 8px;font-size:12px;color:var(--mute)}
+.res strong{font-size:18px;color:var(--ok);font-family:'IBM Plex Mono',monospace}
+.pop{position:absolute;right:18px;top:196px;width:224px;background:var(--raise);border:1px solid var(--line-2);border-radius:10px;box-shadow:var(--shadow);padding:10px;font-size:12px;animation:float 5s ease-in-out infinite}
+.pop .h{display:flex;justify-content:space-between;margin-bottom:7px}.pop .h b{font-family:'IBM Plex Mono',monospace;color:var(--var)}
+.pop .h span{font-size:10.5px;color:var(--mute);border:1px solid var(--line);border-radius:99px;padding:0 7px}
+.pop .in{border:1px solid var(--accent);border-radius:6px;padding:6px 9px;font-family:'IBM Plex Mono',monospace}
+.pop .hint{font-size:10.5px;color:var(--faint);margin-top:6px}
+@keyframes float{50%{transform:translateY(-6px)}}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.pop{animation:none}.btn{transition:none}}
+section{padding:84px 0;border-top:1px solid var(--line)}
+.sec-head{max-width:620px;margin-bottom:44px}
+h2{font-size:clamp(28px,3.4vw,38px);letter-spacing:-.03em;line-height:1.1;margin:0 0 12px}
+.sec-head p{color:var(--ink-2);margin:0;font-size:17px}
+.features{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.feature{background:var(--surface);padding:26px 24px}
+.feature .ic{width:36px;height:36px;border-radius:9px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent-ink);margin-bottom:16px}
+.feature h3{font-size:16px;margin:0 0 6px}.feature p{margin:0;color:var(--ink-2);font-size:14.5px}
+.plats{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.plat{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:26px;display:flex;flex-direction:column}
+.plat.best{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.plat-top{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+.plat-top .ic{width:40px;height:40px;border-radius:10px;background:var(--ink);color:var(--paper);display:grid;place-items:center}
+.plat h3{font-size:19px;margin:0}
+.tag{margin-left:auto;font:500 11px 'IBM Plex Mono',monospace;color:var(--accent-ink);background:var(--accent-soft);border-radius:99px;padding:2px 9px;white-space:nowrap}
+.plat .sub{color:var(--mute);font-size:13.5px;margin:0 0 14px}
+.dl{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border:1px solid var(--line-2);border-radius:10px;text-decoration:none;margin-top:10px;background:var(--raise);transition:border-color .12s}
+.dl:hover{border-color:var(--ink)}
+.dl b{font-size:14.5px;display:block;font-weight:600}.dl span{font-size:12.5px;color:var(--mute)}
+.dl svg{flex:none;color:var(--ink-2)}
+.plat .note{margin:auto 0 0;padding-top:18px;font-size:13px;color:var(--mute)}
+.none{color:var(--mute);font-size:14px;padding:12px 0}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.step{padding:24px;border-radius:14px;border:1px dashed var(--line-2)}
+.step h3{font-size:15px;margin:0 0 12px;display:flex;gap:10px;align-items:center}
+.step ol{margin:0;padding-left:18px;color:var(--ink-2);font-size:14px}.step li{margin-bottom:8px}
+footer{border-top:1px solid var(--line);padding:30px 0 40px;font-size:13px;color:var(--mute)}
+footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+@media (max-width:920px){.hero{grid-template-columns:1fr;gap:44px;padding-top:28px}.features,.plats,.steps{grid-template-columns:1fr}.nav nav{display:none}}
+@media (max-width:560px){code{white-space:normal;overflow-wrap:anywhere}.wrap,.hero{padding-left:16px;padding-right:16px}.app{grid-template-columns:1fr}.side{display:none}.pop{right:12px;width:200px}section{padding:60px 0}.cta .btn{width:100%;justify-content:center}}
+`;
+
+const svgIcon = (d, s = 20) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const ICONS = {
+  download: svgIcon('<path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/>', 18),
+  windows: svgIcon('<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/>'),
+  mac: svgIcon('<path d="M9 6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z"/>'),
+  linux: svgIcon('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3"/><path d="M13 15h4"/>'),
+  import: svgIcon('<path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><rect x="3" y="17" width="18" height="4" rx="1"/>'),
+  vars: svgIcon('<path d="M8 4c-2 0-3 1-3 3v2c0 1.5-1 3-2 3 1 0 2 1.5 2 3v2c0 2 1 3 3 3"/><path d="M16 4c2 0 3 1 3 3v2c0 1.5 1 3 2 3-1 0-2 1.5-2 3v2c0 2-1 3-3 3"/>'),
+  edit: svgIcon('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13 7 4 4"/>'),
+  form: svgIcon('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10"/>'),
+  team: svgIcon('<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 4.5a3.2 3.2 0 0 1 0 6.3M21 20c0-2.6-1.6-4.8-4-5.6"/>'),
+  update: svgIcon('<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/>'),
+};
+
+function landingPage(ua) {
   const all = downloads();
-  const list = Object.entries(all);
   const best = pickDownload(all, null, ua || '');
-  const btn = 'display:block;text-align:center;margin:18px 0 10px;padding:12px 16px;border-radius:10px;background:#1f1d1a;color:#f4f2ec;text-decoration:none;font-weight:600';
-  const row = 'display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-top:1px solid #e7e3d9;font-size:14px;text-decoration:none;color:inherit';
-  const mb = (n) => `${(n / 1048576).toFixed(0)} MB`;
-  const when = best && best.date ? new Date(best.date).toISOString().slice(0, 10) : '';
-  const key = best && list.find(([, d]) => d === best)[0];
-  const dl = best
-    ? `<a href="/download?os=${key}" style="${btn}">Download for ${esc(best.label)}${best.label === 'macOS' ? ` · ${esc(best.note)}` : ''}</a>
-<p style="font-size:13px">Version ${esc(best.version)} · ${mb(best.size)}${when ? ' · ' + when : ''}</p>
-<h2 style="font-size:15px;margin:26px 0 4px">All downloads</h2>
-${list.map(([k, d]) => `<a href="/download?os=${k}" style="${row}"><span><b>${esc(d.label)}</b> · ${esc(d.note)}</span><span style="color:#8a8478">${esc(d.version)} · ${mb(d.size)}</span></a>`).join('\n')}`
-    : '<p><b>No release published yet.</b></p>';
-  return page('ApiDock', `<h1>ApiDock</h1>
-<p>A desktop API client: import Postman collections, keep variable sets per collection, send requests and read responses — and share collections with your team.</p>
-${dl}
-<h2 style="font-size:15px;margin:26px 0 4px">First start</h2>
-<p style="font-size:13px"><b>Windows</b> may show “Windows protected your PC” because the installer isn’t code-signed yet — click <b>More info → Run anyway</b>.</p>
-<p style="font-size:13px"><b>macOS</b>: open the .dmg and drag ApiDock to Applications. If macOS says it can’t be opened or is damaged, go to <b>System Settings → Privacy &amp; Security → Open Anyway</b>, or run <code>xattr -cr /Applications/ApiDock.app</code> in Terminal. New versions are installed the same way.</p>
-<p style="font-size:13px"><b>Linux</b>: make the AppImage executable (<code>chmod +x ApiDock-*.AppImage</code>) and run it, or install the .deb with <code>sudo apt install ./ApiDock-*.deb</code>.</p>
-<p style="font-size:13px">After installing, open <b>Team</b> (bottom-left) to create an account or sign in. Windows and Linux update themselves; on macOS the app tells you when a new version is out.</p>`);
+  const bestKey = best ? Object.keys(all).find((k) => all[k] === best) : null;
+  const bestOs = bestKey ? bestKey.split('-')[0] : null;
+  const mb = (n) => `${Math.round(n / 1048576)} MB`;
+  const shown = best || Object.values(all)[0] || {};
+  const version = shown.version;
+  const when = shown.date ? new Date(shown.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+
+  const heroCta = best
+    ? `<a class="btn btn-primary" href="/download?os=${bestKey}">${ICONS.download} Download for ${esc(best.label)}${best.label === 'macOS' ? ` <small>${esc(best.note.split(' (')[0])}</small>` : ''}</a>
+      <a class="btn btn-ghost" href="#download">Other platforms</a>`
+    : '<a class="btn btn-ghost" href="#download">Downloads coming soon</a>';
+
+  const dl = (key, title) => {
+    const d = all[key];
+    if (!d) return '';
+    return `<a class="dl" href="/download?os=${key}"><div><b>${esc(title)}</b><span>Version ${esc(d.version)} · ${mb(d.size)}</span></div>${ICONS.download}</a>`;
+  };
+  const plat = (os, name, icon, sub, links, note) => {
+    const body = links.filter(Boolean).join('');
+    return `<div class="plat${bestOs === os ? ' best' : ''}">
+      <div class="plat-top"><div class="ic">${icon}</div><h3>${name}</h3>${bestOs === os ? '<span class="tag">Your system</span>' : ''}</div>
+      <p class="sub">${sub}</p>
+      ${body || '<p class="none">Not published yet.</p>'}
+      <p class="note">${note}</p>
+    </div>`;
+  };
+  const feature = (icon, title, text) => `<div class="feature"><div class="ic">${ICONS[icon]}</div><h3>${title}</h3><p>${text}</p></div>`;
+
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ApiDock</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231f1d1a'/%3E%3Ctext x='16' y='22' font-family='monospace' font-size='17' font-weight='700' fill='%23f4f2ec' text-anchor='middle'%3EA%3C/text%3E%3C/svg%3E">
+<meta name="description" content="ApiDock is a desktop API client for Windows, macOS and Linux: import Postman collections, keep variable sets, send requests and share collections with your team.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>${LANDING_CSS}</style></head><body>
+<header class="wrap nav">
+  <a class="brand" href="/"><span class="mark">A</span>ApiDock</a>
+  <nav><a href="#features">Features</a><a href="#download">Download</a><a href="#install">Install</a></nav>
+</header>
+<main>
+<div class="wrap hero">
+  <div>
+    <span class="eyebrow"><i></i>${version ? `Version ${esc(version)}${when ? ' · ' + esc(when) : ''}` : 'Desktop API client'}</span>
+    <h1>Send requests,<br>not <em>sign-up forms.</em></h1>
+    <p class="lede">ApiDock is a desktop API client that runs on your machine. Import your Postman collections, switch environments in one click, and share collections with your team.</p>
+    <div class="cta">${heroCta}</div>
+    <p class="meta">Free · Windows, macOS and Linux · Updates itself</p>
+  </div>
+  <div class="shot" aria-hidden="true">
+    <div class="bar"><i></i><i></i><i></i></div>
+    <div class="app">
+      <div class="side">
+        <b>01 AUTH</b>
+        <div class="on"><span class="m post">POST</span>Login</div>
+        <div><span class="m get">GET</span>Current user</div>
+        <div><span class="m post">POST</span>Refresh token</div>
+        <b style="margin-top:14px">04 VEHICLE</b>
+        <div><span class="m get">GET</span>Vehicle list</div>
+        <div><span class="m get">GET</span>Vehicle details</div>
+      </div>
+      <div class="main">
+        <div class="url"><span class="m post">POST</span><span class="path"><span class="v">{{baseUrl}}</span>/auth/login</span><span class="send">Send</span></div>
+        <div class="tabs"><span>Params</span><span>Headers</span><span class="on">Body</span><span>Docs</span></div>
+<div class="code">{
+  <span class="k">"username"</span>: <span class="v">"{{username}}"</span>,
+  <span class="k">"password"</span>: <span class="v">"{{password}}"</span>,
+  <span class="k">"platform"</span>: <span class="s">"android"</span>
+}</div>
+        <div class="res"><strong>200</strong> OK · 155 ms · 1.2 KB</div>
+<div class="code"><span class="k">"token"</span>: <span class="s">"eyJhbGciOiJIUzI1NiJ9…"</span>,
+<span class="k">"expires_in"</span>: <span class="n">3600</span></div>
+      </div>
+    </div>
+    <div class="pop"><div class="h"><b>username</b><span>Staging</span></div><div class="in">demo@example.com</div><div class="hint">Enter to save · Esc to close</div></div>
+  </div>
+</div>
+
+<section id="features"><div class="wrap">
+  <div class="sec-head"><h2>Everything you need to work with an API.</h2><p>Your data stays on your computer, and the app opens straight to your requests, with no sign-up.</p></div>
+  <div class="features">
+    ${feature('import', 'Import from Postman', 'Bring in Postman collections, environments and <code>.env</code> files. Folders, auth and examples come with them.')}
+    ${feature('vars', 'Variable sets', 'Keep Staging, Production and Local values per collection and switch between them in one click. Missing variables are flagged before you send.')}
+    ${feature('edit', 'Edit values where you use them', 'Hover any <code>{{variable}}</code> to see its value, type a new one and press Enter.')}
+    ${feature('form', 'Typed form-data', 'Text, Number, Boolean, JSON or File fields, checked as you type, so a bad value is caught before the server sees it.')}
+    ${feature('team', 'Team collections', 'Share collections with Viewer or Editor access. ApiDock warns you if two people edit at once instead of overwriting.')}
+    ${feature('update', 'Always up to date', 'The app checks for new versions and installs them in one click, so everyone on the team runs the same build.')}
+  </div>
+</div></section>
+
+<section id="download"><div class="wrap">
+  <div class="sec-head"><h2>Download ApiDock${version ? ` ${esc(version)}` : ''}</h2><p>Pick your platform. Every download is the full app, with nothing else to install.</p></div>
+  <div class="plats">
+    ${plat('windows', 'Windows', ICONS.windows, 'Windows 10 and 11, 64-bit', [dl('windows', 'Installer (.exe)')], 'Updates itself.')}
+    ${plat('mac', 'macOS', ICONS.mac, 'macOS 12 Monterey or newer', [dl('mac-arm64', 'Apple Silicon · M1–M4'), dl('mac-x64', 'Intel')], 'Not sure which? Apple menu → About This Mac → Chip.')}
+    ${plat('linux', 'Linux', ICONS.linux, '64-bit (x86_64)', [dl('linux-appimage', 'AppImage · any distro'), dl('linux-deb', 'Debian / Ubuntu (.deb)')], 'Updates itself.')}
+  </div>
+</div></section>
+
+<section id="install"><div class="wrap">
+  <div class="sec-head"><h2>First start</h2><p>The builds aren’t code-signed yet, so your system asks once before opening ApiDock.</p></div>
+  <div class="steps">
+    <div class="step"><h3>${ICONS.windows} Windows</h3><ol><li>Run <b>ApiDock-Setup</b>.</li><li>If you see “Windows protected your PC”, click <b>More info → Run anyway</b>.</li><li>Open ApiDock from the Start menu.</li></ol></div>
+    <div class="step"><h3>${ICONS.mac} macOS</h3><ol><li>Open the <code>.dmg</code> and drag ApiDock to Applications.</li><li>If macOS blocks it: <b>System Settings → Privacy &amp; Security → Open Anyway</b>.</li><li>Or run <code>xattr -cr /Applications/ApiDock.app</code> in Terminal.</li></ol></div>
+    <div class="step"><h3>${ICONS.linux} Linux</h3><ol><li>AppImage: <code>chmod +x ApiDock-*.AppImage</code>, then run it.</li><li>Debian / Ubuntu: <code>sudo apt install ./ApiDock-*.deb</code></li><li>To share collections, open <b>Team</b> at the bottom left.</li></ol></div>
+  </div>
+</div></section>
+</main>
+<footer><div class="wrap"><span>ApiDock${version ? ` ${esc(version)}` : ''}</span><span>Windows and Linux update themselves. On macOS the app tells you when a new version is out.</span></div></footer>
+</body></html>`;
 }
 
 // ---------- server ----------
@@ -704,7 +899,7 @@ const server = http.createServer(async (req, res) => {
     return handleUpdateUpload(req, res, decodeURIComponent(url.pathname.slice('/admin/updates/'.length)));
   }
   try {
-    if (req.method === 'GET' && url.pathname === '/') return send(res, 200, downloadPage(req.headers['user-agent']));
+    if (req.method === 'GET' && url.pathname === '/') return send(res, 200, landingPage(req.headers['user-agent']));
     // Short, shareable link that always points at the newest installer:
     // /download picks by browser, /download?os=windows|mac|mac-arm64|mac-x64|linux|linux-appimage|linux-deb
     if (req.method === 'GET' && url.pathname === '/download') {
